@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAQ チャットボット</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --surface2:  #22263a;
+    --accent:    #4f8ef7;
+    --accent2:   #a78bfa;
+    --text:      #e8eaf2;
+    --text-dim:  #7b80a0;
+    --bot-bg:    #1e2235;
+    --user-bg:   #1e3a5f;
+    --radius:    16px;
+    --shadow:    0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  /* ── ウィンドウ全体 ── */
+  .chat-window {
+    width: 100%;
+    max-width: 680px;
+    height: min(85dvh, 780px);
+    background: var(--surface);
+    border-radius: 24px;
+    box-shadow: var(--shadow), 0 0 0 1px rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── ヘッダー ── */
+  .header {
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #1a1d27 0%, #1e2235 100%);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .header-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    box-shadow: 0 4px 12px rgba(79,142,247,0.35);
+  }
+  .header-info h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
+  .header-info p  { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 8px #4ade80;
+    margin-left: auto;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+
+  /* ── メッセージエリア ── */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+  /* ── メッセージバブル ── */
+  .msg { display: flex; gap: 10px; align-items: flex-end; animation: fadeUp 0.3s ease; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .msg.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .msg.bot  .avatar { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .msg.user .avatar { background: var(--surface2); }
+
+  .bubble {
+    max-width: 76%;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.7;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .msg.bot  .bubble {
+    background: var(--bot-bg);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.user .bubble {
+    background: var(--user-bg);
+    border: 1px solid rgba(79,142,247,0.2);
+    border-bottom-right-radius: 4px;
+    color: #c8deff;
+  }
+
+  /* ── タイピングインジケーター ── */
+  .typing .bubble { padding: 14px 18px; }
+  .typing-dots { display: flex; gap: 5px; }
+  .typing-dots span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-dim);
+    animation: bounce 1.2s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%,60%,100% { transform: translateY(0); }
+    30% { transform: translateY(-6px); }
+  }
+
+  /* ── 入力エリア ── */
+  .input-area {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.07);
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-shrink: 0;
+    background: var(--surface);
+  }
+  textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px;
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 14px;
+    padding: 12px 16px;
+    resize: none;
+    outline: none;
+    min-height: 48px;
+    max-height: 140px;
+    line-height: 1.5;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--text-dim); }
+
+  #send-btn {
+    width: 48px; height: 48px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+    transition: transform 0.15s, opacity 0.15s;
+    box-shadow: 0 4px 12px rgba(79,142,247,0.35);
+  }
+  #send-btn:hover:not(:disabled) { transform: scale(1.06); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── ウェルカムメッセージ ── */
+  .welcome {
+    text-align: center;
+    padding: 32px 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.8;
+  }
+  .welcome .icon { font-size: 36px; margin-bottom: 12px; }
+  .welcome strong { color: var(--text); font-weight: 500; }
+
+  /* ── サジェストチップ ── */
+  .suggestions {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center; margin-top: 16px;
+  }
+  .chip {
+    padding: 7px 14px;
+    background: var(--surface2);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .chip:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(79,142,247,0.08);
+  }
+</style>
+</head>
+<body>
+
+<div class="chat-window">
+  <div class="header">
+    <div class="header-icon">🤖</div>
+    <div class="header-info">
+      <h1>FAQ アシスタント</h1>
+      <p>Gemini AI × スプレッドシート連携</p>
+    </div>
+    <div class="status-dot"></div>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="welcome">
+      <div class="icon">💬</div>
+      <strong>何でもご質問ください</strong><br>
+      FAQデータをもとにAIがお答えします。
+      <div class="suggestions">
+        <span class="chip" onclick="sendSuggestion(this)">よくある質問は？</span>
+        <span class="chip" onclick="sendSuggestion(this)">使い方を教えて</span>
+        <span class="chip" onclick="sendSuggestion(this)">問い合わせ方法は？</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <textarea id="user-input" placeholder="メッセージを入力…" rows="1"></textarea>
+    <button id="send-btn" onclick="sendMessage()" title="送信">➤</button>
+  </div>
+</div>
+
+<script>
+  const messagesEl = document.getElementById('messages');
+  const inputEl    = document.getElementById('user-input');
+  const sendBtn    = document.getElementById('send-btn');
+
+  // テキストエリアの高さ自動調整
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+  });
+
+  // Enterで送信（Shift+Enterは改行）
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  function sendSuggestion(el) {
+    inputEl.value = el.textContent;
+    sendMessage();
+  }
+
+  function addMessage(text, role) {
+    const isBot   = role === 'bot';
+    const div     = document.createElement('div');
+    div.className = `msg ${role}`;
+    div.innerHTML = `
+      <div class="avatar">${isBot ? '🤖' : '👤'}</div>
+      <div class="bubble">${escapeHtml(text)}</div>
+    `;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  function showTyping() {
+    const div = document.createElement('div');
+    div.className = 'msg bot typing';
+    div.id = 'typing';
+    div.innerHTML = `
+      <div class="avatar">🤖</div>
+      <div class="bubble">
+        <div class="typing-dots">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    `;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typing');
+    if (el) el.remove();
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    // ウェルカム画面を消す
+    const welcome = messagesEl.querySelector('.welcome');
+    if (welcome) welcome.remove();
+
+    addMessage(text, 'user');
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    showTyping();
+
+    // GASのchat()関数を呼び出す
+    google.script.run
+      .withSuccessHandler((res) => {
+        removeTyping();
+        addMessage(res.success ? res.message : res.message, 'bot');
+        sendBtn.disabled = false;
+        inputEl.focus();
+      })
+      .withFailureHandler((err) => {
+        removeTyping();
+        addMessage('通信エラーが発生しました。再度お試しください。', 'bot');
+        sendBtn.disabled = false;
+      })
+      .chat(text);
+  }
+</script>
+</body>
+</html>
