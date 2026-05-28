@@ -227,6 +227,8 @@ async function doLogin() {
   }
   err.textContent = '確認中…';
   userEmail = email;
+  // ユーザー操作タイミングでTTSをアンロック（Chrome対策）
+  try { const u=new SpeechSynthesisUtterance(''); u.volume=0; speechSynthesis.speak(u); speechSynthesis.cancel(); } catch(e) {}
   try {
     const info = await gasCall('getUser');
     if (info.role === 'denied') { err.textContent = 'アクセス権限がありません。'; userEmail = ''; return; }
@@ -422,12 +424,28 @@ document.addEventListener('DOMContentLoaded',()=>{
 // ============================================================
 function speak(text) {
   if(!text||!window.speechSynthesis) return;
+  // Chromeのユーザー操作なし制限を回避
+  if(speechSynthesis.paused) speechSynthesis.resume();
   speechSynthesis.cancel();
-  const utt=new SpeechSynthesisUtterance(text);
-  utt.lang='ja-JP'; utt.rate=1.0;
-  utt.onstart=()=>{ isSpeaking=true; document.getElementById('ttsOverlay').classList.add('speaking'); if(recognition) try{recognition.abort();}catch(e){} };
-  utt.onend=()=>{ isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); if(!isMicOn) startWakeListener(); };
-  speechSynthesis.speak(utt);
+
+  // 少し待ってから発話（cancel直後に speak するとChromeで無音になる対策）
+  setTimeout(() => {
+    const utt=new SpeechSynthesisUtterance(text);
+    utt.lang='ja-JP'; utt.rate=1.0;
+    // 日本語音声を明示的に選択
+    const voices = speechSynthesis.getVoices();
+    const jaVoice = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja'));
+    if(jaVoice) utt.voice = jaVoice;
+    utt.onstart=()=>{ isSpeaking=true; document.getElementById('ttsOverlay').classList.add('speaking'); if(recognition) try{recognition.abort();}catch(e){} };
+    utt.onend=()=>{ isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); if(!isMicOn) startWakeListener(); };
+    utt.onerror=(e)=>{ Logger && Logger.log && Logger.log('TTS error: '+e.error); isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); };
+    speechSynthesis.speak(utt);
+  }, 100);
+}
+
+// 音声リスト読み込み（Chrome対策）
+if(window.speechSynthesis) {
+  speechSynthesis.onvoiceschanged = () => { speechSynthesis.getVoices(); };
 }
 function stopSpeak(){ speechSynthesis.cancel(); isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); }
 
