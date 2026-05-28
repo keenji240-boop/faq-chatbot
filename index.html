@@ -3,344 +3,605 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FAQ チャットボット</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>鳥取大学 FAQ アシスタント</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --bg:        #0f1117;
-    --surface:   #1a1d27;
-    --surface2:  #22263a;
-    --accent:    #4f8ef7;
-    --accent2:   #a78bfa;
-    --text:      #e8eaf2;
-    --text-dim:  #7b80a0;
-    --bot-bg:    #1e2235;
-    --user-bg:   #1e3a5f;
-    --radius:    16px;
-    --shadow:    0 4px 24px rgba(0,0,0,0.4);
-  }
-
-  body {
-    font-family: 'Noto Sans JP', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-  }
-
-  /* ── ウィンドウ全体 ── */
-  .chat-window {
-    width: 100%;
-    max-width: 680px;
-    height: min(85dvh, 780px);
-    background: var(--surface);
-    border-radius: 24px;
-    box-shadow: var(--shadow), 0 0 0 1px rgba(255,255,255,0.06);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  /* ── ヘッダー ── */
-  .header {
-    padding: 20px 24px;
-    background: linear-gradient(135deg, #1a1d27 0%, #1e2235 100%);
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-shrink: 0;
-  }
-  .header-icon {
-    width: 42px; height: 42px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border-radius: 12px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
-    box-shadow: 0 4px 12px rgba(79,142,247,0.35);
-  }
-  .header-info h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.02em; }
-  .header-info p  { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
-  .status-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #4ade80;
-    box-shadow: 0 0 8px #4ade80;
-    margin-left: auto;
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
-  }
-
-  /* ── メッセージエリア ── */
-  .messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    scroll-behavior: smooth;
-  }
-  .messages::-webkit-scrollbar { width: 4px; }
-  .messages::-webkit-scrollbar-track { background: transparent; }
-  .messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-
-  /* ── メッセージバブル ── */
-  .msg { display: flex; gap: 10px; align-items: flex-end; animation: fadeUp 0.3s ease; }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  .msg.user { flex-direction: row-reverse; }
-
-  .avatar {
-    width: 32px; height: 32px; border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; flex-shrink: 0;
-  }
-  .msg.bot  .avatar { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
-  .msg.user .avatar { background: var(--surface2); }
-
-  .bubble {
-    max-width: 76%;
-    padding: 12px 16px;
-    border-radius: var(--radius);
-    font-size: 14px;
-    line-height: 1.7;
-    word-break: break-word;
-    white-space: pre-wrap;
-  }
-  .msg.bot  .bubble {
-    background: var(--bot-bg);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-bottom-left-radius: 4px;
-  }
-  .msg.user .bubble {
-    background: var(--user-bg);
-    border: 1px solid rgba(79,142,247,0.2);
-    border-bottom-right-radius: 4px;
-    color: #c8deff;
-  }
-
-  /* ── タイピングインジケーター ── */
-  .typing .bubble { padding: 14px 18px; }
-  .typing-dots { display: flex; gap: 5px; }
-  .typing-dots span {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--text-dim);
-    animation: bounce 1.2s infinite;
-  }
-  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
-  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes bounce {
-    0%,60%,100% { transform: translateY(0); }
-    30% { transform: translateY(-6px); }
-  }
-
-  /* ── 入力エリア ── */
-  .input-area {
-    padding: 16px 20px;
-    border-top: 1px solid rgba(255,255,255,0.07);
-    display: flex;
-    gap: 10px;
-    align-items: flex-end;
-    flex-shrink: 0;
-    background: var(--surface);
-  }
-  textarea {
-    flex: 1;
-    background: var(--surface2);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 14px;
-    color: var(--text);
-    font-family: 'Noto Sans JP', sans-serif;
-    font-size: 14px;
-    padding: 12px 16px;
-    resize: none;
-    outline: none;
-    min-height: 48px;
-    max-height: 140px;
-    line-height: 1.5;
-    transition: border-color 0.2s;
-  }
-  textarea:focus { border-color: var(--accent); }
-  textarea::placeholder { color: var(--text-dim); }
-
-  #send-btn {
-    width: 48px; height: 48px; border-radius: 14px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; flex-shrink: 0;
-    transition: transform 0.15s, opacity 0.15s;
-    box-shadow: 0 4px 12px rgba(79,142,247,0.35);
-  }
-  #send-btn:hover:not(:disabled) { transform: scale(1.06); }
-  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  /* ── ウェルカムメッセージ ── */
-  .welcome {
-    text-align: center;
-    padding: 32px 20px;
-    color: var(--text-dim);
-    font-size: 13px;
-    line-height: 1.8;
-  }
-  .welcome .icon { font-size: 36px; margin-bottom: 12px; }
-  .welcome strong { color: var(--text); font-weight: 500; }
-
-  /* ── サジェストチップ ── */
-  .suggestions {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    justify-content: center; margin-top: 16px;
-  }
-  .chip {
-    padding: 7px 14px;
-    background: var(--surface2);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 20px;
-    font-size: 12px;
-    color: var(--text-dim);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .chip:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: rgba(79,142,247,0.08);
-  }
+/* ── リセット・変数 ── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06060f;--surface:#0a0a16;--surface2:#0f1022;--surface3:#13162a;
+  --border:#1e2240;--border2:#2a2d44;
+  --accent:#4f8ef7;--accent2:#a78bfa;
+  --green:#4a9a4a;--amber:#c89a2a;--cyan:#2a9aaa;--purple:#8a4aaa;--red:#aa4a4a;
+  --text:#c8d0f0;--text2:#7b80a0;--text3:#3a4060;
+  --radius:14px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Segoe UI','Noto Sans JP',sans-serif;font-size:14px}
+.app{display:flex;flex-direction:column;height:100vh;max-width:520px;margin:0 auto;background:var(--surface);position:relative;border-left:1px solid var(--border);border-right:1px solid var(--border)}
+.topbar{position:absolute;top:0;right:0;z-index:30;padding:7px 12px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;pointer-events:none}
+.role-badge{font-size:9px;padding:2px 8px;border-radius:10px;font-weight:700;letter-spacing:.06em}
+.badge-student{background:#1a2a4a;color:#7eb8ff;border:1px solid #2a4a7a}
+.badge-staff  {background:#1a3a1a;color:#7ed87e;border:1px solid #2a6a2a}
+.badge-admin  {background:#3a1a3a;color:#da8ada;border:1px solid #6a2a6a}
+.badge-denied {background:#3a1a1a;color:#e87a7a;border:1px solid #6a2a2a}
+.email-mask{font-size:9px;color:var(--text3);font-family:monospace}
+.anim-header{height:150px;flex-shrink:0;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.anim-header::after{content:'タップでパターン切替';position:absolute;bottom:5px;left:50%;transform:translateX(-50%);font-size:9px;color:rgba(255,255,255,.15);pointer-events:none}
+.p-eye{width:100%;height:100%;background:radial-gradient(ellipse at 50% 60%,#1a0800,#050200 60%,#000);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.eye-lid-t,.eye-lid-b{position:absolute;left:50%;transform:translateX(-50%);width:150px}
+.eye-lid-t{top:22px;height:52px;border-radius:100% 100% 0 0/100% 100% 0 0;border:2.5px solid #ff5500;border-bottom:none;box-shadow:0 0 20px #ff4400,0 -4px 30px #ff220055;animation:lidP 3s ease-in-out infinite}
+.eye-lid-b{bottom:22px;height:36px;border-radius:0 0 100% 100%/0 0 100% 100%;border:2.5px solid #ff5500;border-top:none;box-shadow:0 0 20px #ff4400;animation:lidP 3s ease-in-out infinite}
+@keyframes lidP{0%,100%{box-shadow:0 0 20px #ff4400}50%{box-shadow:0 0 40px #ff6600,0 0 80px #ff330033}}
+.eye-iris{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:55px;height:86px;border-radius:50%;background:radial-gradient(ellipse,#ffcc00,#ff6600 35%,#cc2200 65%,#1a0000 90%);box-shadow:0 0 30px #ff5500,0 0 60px #ff220055;animation:irisP 3s ease-in-out infinite}
+@keyframes irisP{0%,100%{transform:translate(-50%,-50%) scaleY(1)}50%{transform:translate(-50%,-50%) scaleY(1.1)}}
+.eye-pupil{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:11px;height:58px;background:#000;border-radius:50%;animation:pupP 3s ease-in-out infinite}
+@keyframes pupP{0%,100%{height:58px}50%{height:70px}}
+.eye-flame{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);width:55px;height:90px;background:linear-gradient(to top,#ff4400,#ff880066,transparent);border-radius:50% 50% 30% 30%;filter:blur(6px);animation:flameP 2s ease-in-out infinite}
+@keyframes flameP{0%,100%{transform:translateX(-50%) scaleX(1);opacity:.5}50%{transform:translateX(-50%) scaleX(1.4);opacity:.9}}
+.p-horus{width:100%;height:100%;background:radial-gradient(ellipse at 50%,#1a0a00,#050200 70%,#000);display:flex;align-items:center;justify-content:center;position:relative}
+.horus-glow{position:absolute;width:200px;height:100px;background:radial-gradient(ellipse,rgba(255,150,0,.2),transparent 70%);animation:hGlow 3s ease-in-out infinite}
+@keyframes hGlow{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.2)}}
+.horus-img{width:110px;filter:invert(1) sepia(1) saturate(7) hue-rotate(10deg) brightness(1.2);animation:hBob 4s ease-in-out infinite;position:relative;z-index:2}
+@keyframes hBob{0%,100%{transform:scale(1);filter:invert(1) sepia(1) saturate(7) hue-rotate(10deg) brightness(1.2) drop-shadow(0 0 8px #ff8800)}50%{transform:scale(1.06);filter:invert(1) sepia(1) saturate(9) hue-rotate(10deg) brightness(1.6) drop-shadow(0 0 22px #ffaa00)}}
+.p-owl{width:100%;height:100%;background:linear-gradient(160deg,#0d1b2a,#1a0d33);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.owl-ring{position:absolute;border-radius:50%;border:1px solid rgba(167,139,250,.2);animation:owlR 3s ease-out infinite}
+.owl-ring:nth-child(1){width:100px;height:100px}
+.owl-ring:nth-child(2){width:155px;height:155px;animation-delay:.9s}
+.owl-ring:nth-child(3){width:210px;height:210px;animation-delay:1.8s}
+@keyframes owlR{0%{opacity:.5;transform:scale(.7)}100%{opacity:0;transform:scale(1.3)}}
+.owl-img{width:90px;animation:owlF 3s ease-in-out infinite;filter:drop-shadow(0 0 14px rgba(167,139,250,.7));position:relative;z-index:2}
+@keyframes owlF{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-10px) rotate(2deg)}}
+.p-ganesha{width:100%;height:100%;background:radial-gradient(ellipse at center,#1a1000,#050300);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.ganesha-aura{position:absolute;border-radius:50%;border:1px solid rgba(255,200,50,.15);animation:gAura 2.5s ease-out infinite}
+.ganesha-aura:nth-child(1){width:100px;height:110px}
+.ganesha-aura:nth-child(2){width:155px;height:170px;animation-delay:.8s}
+.ganesha-aura:nth-child(3){width:210px;height:230px;animation-delay:1.6s}
+@keyframes gAura{0%{opacity:.6;transform:scale(.7)}100%{opacity:0;transform:scale(1.3)}}
+.ganesha-img{width:82px;border-radius:8px;animation:gBreath 4s ease-in-out infinite;position:relative;z-index:2}
+@keyframes gBreath{0%,100%{filter:brightness(1.1) saturate(1.3) drop-shadow(0 0 14px rgba(255,180,0,.5));transform:scale(1)}50%{filter:brightness(1.4) saturate(1.6) drop-shadow(0 0 28px rgba(255,210,0,.8));transform:scale(1.07)}}
+.p-data{width:100%;height:100%;background:#000d06;position:relative;overflow:hidden;font-family:monospace}
+.d-col{position:absolute;top:-30px;display:flex;flex-direction:column;gap:3px;animation:dFall linear infinite}
+.d-ch{font-size:10px;color:#00dd77;text-shadow:0 0 5px #00ff88}
+.d-ch.top{color:#fff;text-shadow:0 0 10px #00ff88}
+@keyframes dFall{from{transform:translateY(-100%)}to{transform:translateY(240%)}}
+.p-plasma{width:100%;height:100%;background:#06000f;display:flex;align-items:center;justify-content:center}
+.pl-wrap{position:relative;width:95px;height:95px}
+.pl-ring{position:absolute;top:50%;left:50%;border-radius:50%;border:2px solid transparent;animation:plR linear infinite}
+.pl-ring:nth-child(1){width:90px;height:90px;margin:-45px 0 0 -45px;border-top-color:#ff00ff;border-right-color:#ff00ff55;animation-duration:2s;box-shadow:0 0 10px #ff00ff44}
+.pl-ring:nth-child(2){width:68px;height:68px;margin:-34px 0 0 -34px;border-bottom-color:#00ffff;border-left-color:#00ffff55;animation-duration:1.4s;animation-direction:reverse;box-shadow:0 0 10px #00ffff44}
+.pl-ring:nth-child(3){width:46px;height:46px;margin:-23px 0 0 -23px;border-top-color:#ffff00;animation-duration:3s}
+.pl-core{position:absolute;top:50%;left:50%;width:18px;height:18px;margin:-9px 0 0 -9px;background:#fff;border-radius:50%;box-shadow:0 0 10px #ff88ff,0 0 25px #aa00ff;animation:plC 1.5s ease-in-out infinite}
+@keyframes plR{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes plC{0%,100%{transform:scale(1)}50%{transform:scale(1.6)}}
+.tts-overlay{position:absolute;inset:0;background:rgba(255,200,100,0);pointer-events:none;transition:background .1s;z-index:10}
+.tts-overlay.speaking{animation:ttsBlink .4s ease-in-out infinite}
+@keyframes ttsBlink{0%,100%{background:rgba(255,200,100,0)}50%{background:rgba(255,200,100,.08)}}
+.chat-area{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.chat-area::-webkit-scrollbar{width:3px}
+.chat-area::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.msg{display:flex;gap:8px;align-items:flex-end;animation:msgIn .25s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{flex-direction:row-reverse}
+.av{width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.msg.bot  .av{background:linear-gradient(135deg,var(--accent),var(--accent2))}
+.msg.user .av{background:var(--surface3)}
+.bubble{max-width:78%;padding:10px 14px;border-radius:13px;font-size:13px;line-height:1.7;word-break:break-word;white-space:pre-wrap}
+.msg.bot  .bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:3px}
+.msg.user .bubble{background:#192848;border:1px solid #253c68;border-bottom-right-radius:3px;color:#b0c8f0}
+.note{font-size:10px;color:var(--text3);text-align:center;padding:5px 0;border-top:1px dashed var(--border);border-bottom:1px dashed var(--border)}
+.typing .bubble{padding:12px 18px}
+.dots{display:flex;gap:5px}
+.dots span{width:7px;height:7px;border-radius:50%;background:var(--text2);animation:dot 1.2s infinite}
+.dots span:nth-child(2){animation-delay:.2s}
+.dots span:nth-child(3){animation-delay:.4s}
+@keyframes dot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-7px)}}
+.input-wrap{padding:10px 12px 6px;border-top:1px solid var(--border);flex-shrink:0}
+.input-row{display:flex;gap:8px;align-items:flex-end}
+textarea{flex:1;background:var(--surface3);border:1px solid var(--border2);border-radius:13px;color:var(--text);font-family:inherit;font-size:13px;padding:10px 13px;resize:none;outline:none;min-height:44px;max-height:120px;line-height:1.5;transition:border-color .2s}
+textarea:focus{border-color:var(--accent)}
+textarea::placeholder{color:var(--text3)}
+.mic-btn{width:40px;height:40px;border-radius:50%;background:var(--surface3);border:1px solid var(--border2);color:var(--text2);cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .2s;flex-shrink:0}
+.mic-btn:hover{border-color:var(--accent);color:var(--accent)}
+.mic-btn.listening{background:#3a1a1a;border-color:#e87a7a;color:#e87a7a;animation:micPulse .8s ease-in-out infinite}
+@keyframes micPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.btn-area{padding:8px 12px 14px;background:var(--surface);flex-shrink:0;display:flex;flex-direction:column;gap:6px}
+.btn-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.btn{padding:8px 18px;border-radius:999px;border:1px solid;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.03em;transition:all .18s;white-space:nowrap;background:transparent}
+.btn:hover{filter:brightness(1.2);transform:scale(1.04)}
+.btn:active{transform:scale(.97)}
+.btn-primary{color:#7eb8ff;border-color:#2a5a9a;background:#1a2a4a}
+.btn-green  {color:#7ed87e;border-color:#2a6a2a;background:#1a3a1a}
+.btn-amber  {color:#e8b84a;border-color:#6a4a1a;background:#3a2a0a}
+.btn-cyan   {color:#6ad8e8;border-color:#1a5a6a;background:#0a2a3a}
+.btn-purple {color:#c47eda;border-color:#5a2a7a;background:#2a1a3a}
+.btn-red    {color:#e87a7a;border-color:#6a2a2a;background:#3a1a1a}
+/* ログイン画面 */
+.login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200;padding:24px}
+.login-card{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:32px 28px;width:100%;max-width:360px;text-align:center}
+.login-card h2{font-size:18px;margin-bottom:8px}
+.login-card p{font-size:12px;color:var(--text2);margin-bottom:24px;line-height:1.7}
+.login-card input{width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-size:13px;padding:11px 14px;outline:none;margin-bottom:12px;font-family:inherit}
+.login-card input:focus{border-color:var(--accent)}
+.login-card input::placeholder{color:var(--text3)}
+.login-btn{width:100%;padding:11px;border-radius:999px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .2s}
+.login-btn:hover{opacity:.85}
+.login-err{color:#e87a7a;font-size:11px;margin-top:8px;min-height:16px}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);width:100%;max-width:420px;padding:20px;max-height:80vh;overflow-y:auto}
+.modal h3{font-size:14px;margin-bottom:14px;color:var(--text)}
+.modal input,.modal textarea{width:100%;background:var(--surface3);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:inherit;font-size:13px;padding:9px 12px;outline:none;margin-bottom:10px}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+.list-item{background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:12px}
+.list-item .no{font-size:10px;color:var(--text3);margin-bottom:4px}
+.list-item .q{color:var(--text);margin-bottom:4px;line-height:1.5}
+.list-item .meta{font-size:10px;color:var(--text2)}
 </style>
 </head>
 <body>
 
-<div class="chat-window">
-  <div class="header">
-    <div class="header-icon">🤖</div>
-    <div class="header-info">
-      <h1>FAQ アシスタント</h1>
-      <p>Gemini AI × スプレッドシート連携</p>
-    </div>
-    <div class="status-dot"></div>
+<!-- ログイン画面 -->
+<div class="login" id="loginScreen">
+  <div class="login-card">
+    <div style="font-size:48px;margin-bottom:16px">🦉</div>
+    <h2>鳥取大学 FAQアシスタント</h2>
+    <p>鳥取大学のメールアドレスでログインしてください。<br>（@tottori-u.ac.jp / @edu.tottori-u.ac.jp）</p>
+    <input type="email" id="loginEmail" placeholder="メールアドレスを入力" autocomplete="email">
+    <button class="login-btn" onclick="doLogin()">ログイン</button>
+    <div class="login-err" id="loginErr"></div>
   </div>
+</div>
 
-  <div class="messages" id="messages">
-    <div class="welcome">
-      <div class="icon">💬</div>
-      <strong>何でもご質問ください</strong><br>
-      FAQデータをもとにAIがお答えします。
-      <div class="suggestions">
-        <span class="chip" onclick="sendSuggestion(this)">よくある質問は？</span>
-        <span class="chip" onclick="sendSuggestion(this)">使い方を教えて</span>
-        <span class="chip" onclick="sendSuggestion(this)">問い合わせ方法は？</span>
-      </div>
+<!-- メインアプリ -->
+<div class="app" id="mainApp" style="display:none">
+  <div class="topbar">
+    <span id="roleBadge" class="role-badge badge-denied">確認中</span>
+    <span id="emailMask" class="email-mask">...</span>
+  </div>
+  <div class="anim-header" id="animHeader" onclick="nextPattern()">
+    <div class="tts-overlay" id="ttsOverlay"></div>
+  </div>
+  <div class="chat-area" id="chatArea">
+    <div class="msg bot">
+      <div class="av">🤖</div>
+      <div class="bubble">こんにちは！鳥取大学FAQアシスタントです。何でもご質問ください。<br>ウェイクワード「ねえ、フクロウ」で音声コマンドも使えます。🎙️</div>
     </div>
   </div>
+  <div class="input-wrap">
+    <div class="input-row">
+      <textarea id="inputText" placeholder="質問を入力してください…" rows="2"></textarea>
+      <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="音声入力">🎙️</button>
+    </div>
+  </div>
+  <div class="btn-area" id="btnArea"></div>
+</div>
 
-  <div class="input-area">
-    <textarea id="user-input" placeholder="メッセージを入力…" rows="1"></textarea>
-    <button id="send-btn" onclick="sendMessage()" title="送信">➤</button>
+<div class="modal-bg" id="modalBg" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="modalInner">
+    <h3 id="modalTitle"></h3>
+    <div id="modalBody"></div>
+    <div class="modal-btns" id="modalBtns"></div>
   </div>
 </div>
 
 <script>
-  const messagesEl = document.getElementById('messages');
-  const inputEl    = document.getElementById('user-input');
-  const sendBtn    = document.getElementById('send-btn');
+// ============================================================
+//  GAS API エンドポイント
+// ============================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwxHCEMnTELSIOmmiZLc2q37ugzy9j3cT6jxWXumvXAci2UVcaQWnmmCnzDZpjOeL_gNA/exec';
 
-  // テキストエリアの高さ自動調整
-  inputEl.addEventListener('input', () => {
-    inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+// ============================================================
+//  GAS呼び出し共通関数（fetch + text/plain でCORS回避）
+// ============================================================
+async function gasCall(action, params) {
+  const body = JSON.stringify(Object.assign({ action, email: userEmail }, params || {}));
+  const res  = await fetch(GAS_URL, {
+    method : 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body,
   });
+  return res.json();
+}
 
-  // Enterで送信（Shift+Enterは改行）
-  inputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+// ============================================================
+//  状態管理
+// ============================================================
+let userEmail     = '';
+let userInfo      = { role: 'denied', maskedEmail: '' };
+let lastBotMsg    = '';
+let currentPattern = 0;
+let recognition   = null;
+let wakeRecog     = null;
+let isSpeaking    = false;
+let isMicOn       = false;
+const PATTERNS    = 6;
+
+// ============================================================
+//  ログイン
+// ============================================================
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const err   = document.getElementById('loginErr');
+  err.textContent = '';
+  if (!email) { err.textContent = 'メールアドレスを入力してください。'; return; }
+  if (!email.endsWith('@tottori-u.ac.jp') && !email.endsWith('@edu.tottori-u.ac.jp')) {
+    err.textContent = '鳥取大学のメールアドレスを入力してください。'; return;
+  }
+  err.textContent = '確認中…';
+  userEmail = email;
+  try {
+    const info = await gasCall('getUser');
+    if (info.role === 'denied') { err.textContent = 'アクセス権限がありません。'; userEmail = ''; return; }
+    userInfo = info;
+    startApp();
+  } catch(e) {
+    err.textContent = '接続エラーが発生しました。'; userEmail = '';
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('loginEmail').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+});
+
+// ============================================================
+//  アプリ起動
+// ============================================================
+function startApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display     = 'flex';
+  const badge  = document.getElementById('roleBadge');
+  const emailEl= document.getElementById('emailMask');
+  const labels = { student:'学生', staff:'一般職員', admin:'管理職員' };
+  const classes= { student:'badge-student', staff:'badge-staff', admin:'badge-admin' };
+  badge.textContent = labels[userInfo.role] || '不明';
+  badge.className   = 'role-badge ' + (classes[userInfo.role] || 'badge-denied');
+  emailEl.textContent = userInfo.maskedEmail || '';
+  renderButtons();
+  currentPattern = Math.floor(Math.random() * PATTERNS);
+  renderPattern();
+  startWakeListener();
+}
+
+// ============================================================
+//  ボタン描画
+// ============================================================
+function renderButtons() {
+  const area = document.getElementById('btnArea');
+  area.innerHTML = '';
+  const rows = [];
+  rows.push([{ label:'💬 質問する', cls:'btn-primary', fn:'sendMessage' }]);
+  if (userInfo.role === 'staff' || userInfo.role === 'admin') {
+    rows.push([
+      { label:'📋 未解決一覧を聞く', cls:'btn-green', fn:'openUnresolved' },
+      { label:'✏️ 未解決に回答する', cls:'btn-amber', fn:'openAnswerModal' },
+    ]);
+  }
+  if (userInfo.role === 'admin') {
+    rows.push([
+      { label:'✅ 回答済みを確認',  cls:'btn-cyan',   fn:'openResolved' },
+      { label:'📚 FAQを追加・編集', cls:'btn-purple',  fn:'openFaqEdit' },
+    ]);
+    rows.push([
+      { label:'🔍 Webサーチ',  cls:'btn-cyan',   fn:'openWebSearch' },
+      { label:'🌐 サイト探索', cls:'btn-purple',  fn:'runCrawl' },
+      { label:'📊 利用者ログ', cls:'btn-red',     fn:'openLogs' },
+    ]);
+  }
+  rows.forEach(row => {
+    const div = document.createElement('div'); div.className = 'btn-row';
+    row.forEach(b => {
+      const btn = document.createElement('button');
+      btn.className = 'btn ' + b.cls;
+      btn.textContent = b.label;
+      btn.onclick = () => window[b.fn]();
+      div.appendChild(btn);
+    });
+    area.appendChild(div);
+  });
+}
+
+// ============================================================
+//  アニメーションパターン
+// ============================================================
+function renderPattern() {
+  const header  = document.getElementById('animHeader');
+  const overlay = document.getElementById('ttsOverlay');
+  header.innerHTML = '';
+  header.appendChild(overlay);
+  const p = currentPattern;
+  let el;
+  if (p === 0) {
+    el = document.createElement('div'); el.className = 'p-eye';
+    el.innerHTML = '<div class="eye-flame"></div><div class="eye-lid-t"></div><div class="eye-lid-b"></div><div class="eye-iris"></div><div class="eye-pupil"></div>';
+    for (let i = 0; i < 12; i++) {
+      const s = document.createElement('div');
+      const ang = Math.random()*Math.PI*2, d = 20+Math.random()*55;
+      s.style.cssText = `position:absolute;width:${1+Math.random()*2}px;height:${1+Math.random()*2}px;border-radius:50%;background:#ff8800;left:calc(50% + ${Math.cos(ang)*18}px);top:calc(50% + ${Math.sin(ang)*28}px);animation:sparkF ${.8+Math.random()*1.5}s linear ${-Math.random()*2}s infinite`;
+      el.appendChild(s);
     }
+  } else if (p === 1) {
+    el = document.createElement('div'); el.className = 'p-horus';
+    el.innerHTML = '<div class="horus-glow"></div><img class="horus-img" src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Eye_of_Horus_bw.svg/512px-Eye_of_Horus_bw.svg.png" onerror="this.style.opacity=0" alt="">';
+  } else if (p === 2) {
+    el = document.createElement('div'); el.className = 'p-owl';
+    el.innerHTML = '<div class="owl-ring"></div><div class="owl-ring"></div><div class="owl-ring"></div>';
+    const img = document.createElement('img'); img.className = 'owl-img';
+    img.src = 'owl.jpg'; img.alt = '🦉';
+    img.onerror = function(){ this.style.display='none'; const e=document.createElement('div'); e.style.cssText='font-size:60px;animation:owlF 3s ease-in-out infinite;position:relative;z-index:2'; e.textContent='🦉'; el.appendChild(e); };
+    el.appendChild(img);
+    for (let i = 0; i < 20; i++) {
+      const s = document.createElement('div');
+      s.style.cssText = `position:absolute;width:2px;height:2px;border-radius:50%;background:#a78bfa;left:${Math.random()*100}%;top:${Math.random()*100}%;animation:owlTwinkle ${1.5+Math.random()*2}s ${-Math.random()*3}s ease-in-out infinite`;
+      el.appendChild(s);
+    }
+  } else if (p === 3) {
+    el = document.createElement('div'); el.className = 'p-ganesha';
+    el.innerHTML = '<div class="ganesha-aura"></div><div class="ganesha-aura"></div><div class="ganesha-aura"></div>';
+    const img = document.createElement('img'); img.className = 'ganesha-img';
+    img.src = 'ganesha.jpg'; img.alt = '🐘';
+    img.onerror = function(){ this.style.display='none'; const e=document.createElement('div'); e.style.cssText='font-size:60px;position:relative;z-index:2;animation:gBreath 4s ease-in-out infinite'; e.textContent='🐘'; el.appendChild(e); };
+    el.appendChild(img);
+    for (let i = 0; i < 14; i++) {
+      const s = document.createElement('div');
+      const ang = Math.random()*Math.PI*2, d = 25+Math.random()*50;
+      s.style.cssText = `position:absolute;width:${1+Math.random()*2}px;height:${1+Math.random()*2}px;border-radius:50%;background:#ffd700;left:50%;top:50%;animation:gPart ${1.5+Math.random()*2}s ${-Math.random()*2}s linear infinite;--px:${Math.cos(ang)*d}px;--py:${Math.sin(ang)*d}px`;
+      el.appendChild(s);
+    }
+  } else if (p === 4) {
+    el = document.createElement('div'); el.className = 'p-data';
+    const chars = 'アイウエオカキクケコ01234ABCDEF'.split('');
+    for (let i = 0; i < 12; i++) {
+      const col = document.createElement('div'); col.className = 'd-col';
+      col.style.left = (i*8+1)+'%';
+      col.style.animationDuration = (3+Math.random()*4)+'s';
+      col.style.animationDelay    = (-Math.random()*6)+'s';
+      for (let j = 0; j < 16; j++) {
+        const c = document.createElement('div'); c.className = 'd-ch'+(j===0?' top':'');
+        c.textContent = chars[Math.floor(Math.random()*chars.length)];
+        col.appendChild(c);
+      }
+      el.appendChild(col);
+    }
+  } else {
+    el = document.createElement('div'); el.className = 'p-plasma';
+    el.innerHTML = '<div class="pl-wrap"><div class="pl-ring"></div><div class="pl-ring"></div><div class="pl-ring"></div><div class="pl-core"></div></div>';
+  }
+  header.insertBefore(el, overlay);
+}
+function nextPattern() { currentPattern = (currentPattern+1)%PATTERNS; renderPattern(); }
+
+// ============================================================
+//  チャット
+// ============================================================
+async function sendMessage() {
+  const text = document.getElementById('inputText').value.trim();
+  if (!text) return;
+  addMsg(text, 'user');
+  document.getElementById('inputText').value = '';
+  showTyping();
+  try {
+    const res = await gasCall('chat', { message: text });
+    removeTyping();
+    addMsg(res.message, 'bot');
+    lastBotMsg = res.message;
+    if (res.unresolved) {
+      const note = document.createElement('div'); note.className = 'note';
+      note.textContent = `── 受付番号 ${res.receiptNo} として保存されました ──`;
+      document.getElementById('chatArea').appendChild(note);
+    }
+    speak(res.message);
+  } catch(e) {
+    removeTyping(); addMsg('通信エラーが発生しました。', 'bot');
+  }
+}
+
+function addMsg(text, role) {
+  const area = document.getElementById('chatArea');
+  const div  = document.createElement('div'); div.className = 'msg '+role;
+  div.innerHTML = `<div class="av">${role==='bot'?'🤖':'👤'}</div><div class="bubble">${esc(text)}</div>`;
+  area.appendChild(div); area.scrollTop = area.scrollHeight;
+}
+function showTyping() {
+  const area = document.getElementById('chatArea');
+  const div  = document.createElement('div'); div.className='msg bot typing'; div.id='typing';
+  div.innerHTML='<div class="av">🤖</div><div class="bubble"><div class="dots"><span></span><span></span><span></span></div></div>';
+  area.appendChild(div); area.scrollTop=area.scrollHeight;
+}
+function removeTyping(){ const e=document.getElementById('typing'); if(e) e.remove(); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('inputText').addEventListener('keydown', e=>{
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
   });
+  document.getElementById('inputText').addEventListener('input',function(){
+    this.style.height='auto';
+    this.style.height=Math.min(this.scrollHeight,120)+'px';
+  });
+});
 
-  function sendSuggestion(el) {
-    inputEl.value = el.textContent;
-    sendMessage();
+// ============================================================
+//  TTS
+// ============================================================
+function speak(text) {
+  if(!text||!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const utt=new SpeechSynthesisUtterance(text);
+  utt.lang='ja-JP'; utt.rate=1.0;
+  utt.onstart=()=>{ isSpeaking=true; document.getElementById('ttsOverlay').classList.add('speaking'); if(recognition) try{recognition.abort();}catch(e){} };
+  utt.onend=()=>{ isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); if(!isMicOn) startWakeListener(); };
+  speechSynthesis.speak(utt);
+}
+function stopSpeak(){ speechSynthesis.cancel(); isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); }
+
+// ============================================================
+//  音声入力（ウェイクワード＋コマンド）
+// ============================================================
+const WAKE_VARIANTS=['ねえフクロウ','ねえ、フクロウ','ねぇフクロウ','ねぇ、フクロウ','hey fukurou'];
+
+function startWakeListener(){
+  if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)) return;
+  if(isMicOn||isSpeaking) return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  wakeRecog=new SR(); wakeRecog.lang='ja-JP'; wakeRecog.continuous=true; wakeRecog.interimResults=false;
+  wakeRecog.onresult=e=>{
+    const t=e.results[e.results.length-1][0].transcript.trim().replace(/\s/g,'');
+    if(WAKE_VARIANTS.some(w=>t.includes(w.replace(/\s/g,'')))){
+      wakeRecog.stop(); speak('はい、どうぞ。'); setTimeout(()=>startCommandListener(),1200);
+    }
+  };
+  wakeRecog.onerror=()=>{};
+  wakeRecog.onend=()=>{ if(!isMicOn&&!isSpeaking) setTimeout(startWakeListener,500); };
+  try{ wakeRecog.start(); }catch(e){}
+}
+
+function startCommandListener(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  recognition=new SR(); recognition.lang='ja-JP'; recognition.continuous=false; recognition.maxAlternatives=3;
+  recognition.onresult=e=>{
+    const candidates=Array.from(e.results[0]).map(r=>r.transcript.trim());
+    let handled=false;
+    for(const t of candidates){ if(handleVoiceCommand(t)){handled=true;break;} }
+    if(!handled) document.getElementById('inputText').value=candidates[0];
+  };
+  recognition.onend=()=>{ if(!isMicOn) startWakeListener(); };
+  recognition.onerror=()=>startWakeListener();
+  try{ recognition.start(); }catch(e){}
+}
+
+function toggleMic(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alert('音声入力はChromeで対応しています。'); return; }
+  if(isMicOn){
+    isMicOn=false; if(recognition) try{recognition.stop();}catch(e){}
+    document.getElementById('micBtn').classList.remove('listening'); startWakeListener(); return;
   }
+  isMicOn=true; document.getElementById('micBtn').classList.add('listening');
+  if(wakeRecog) try{wakeRecog.stop();}catch(e){}
+  recognition=new SR(); recognition.lang='ja-JP'; recognition.continuous=false; recognition.interimResults=false;
+  recognition.onresult=e=>{ const t=e.results[0][0].transcript.trim(); if(!handleVoiceCommand(t)) document.getElementById('inputText').value=t; };
+  recognition.onend=()=>{ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); startWakeListener(); };
+  recognition.onerror=()=>{ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); startWakeListener(); };
+  try{ recognition.start(); }catch(e){ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); }
+}
 
-  function addMessage(text, role) {
-    const isBot   = role === 'bot';
-    const div     = document.createElement('div');
-    div.className = `msg ${role}`;
-    div.innerHTML = `
-      <div class="avatar">${isBot ? '🤖' : '👤'}</div>
-      <div class="bubble">${escapeHtml(text)}</div>
-    `;
-    messagesEl.appendChild(div);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-    return div;
+function handleVoiceCommand(text){
+  const t=text.replace(/\s/g,'');
+  if(/質問します|聞きたいことがある/.test(t)){ document.getElementById('inputText').focus(); toggleMic(); return true; }
+  if(/送信して|送って|お願い/.test(t)){ sendMessage(); return true; }
+  if(/もう一度|繰り返して/.test(t)){ speak(lastBotMsg); return true; }
+  if(/止めて|ストップ|停止/.test(t)){ stopSpeak(); return true; }
+  if(/消して|クリア/.test(t)){ document.getElementById('inputText').value=''; return true; }
+  if(/未解決を聞かせて|未解決は/.test(t)&&(userInfo.role==='staff'||userInfo.role==='admin')){ openUnresolved(); return true; }
+  if(userInfo.role==='admin'){
+    if(/回答済みを確認|解決済みは/.test(t)){ openResolved(); return true; }
+    if(/FAQを追加|FAQ登録/.test(t)){ openFaqEdit(); return true; }
+    if(/ウェブを探索|サイトを調べて/.test(t)){ runCrawl(); return true; }
+    if(/ログを見せて|利用ログ/.test(t)){ openLogs(); return true; }
+    const sm=t.match(/(?:検索して|調べて)(.+)/); if(sm){ openWebSearch(sm[1]); return true; }
   }
+  return false;
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&!isMicOn&&!isSpeaking) startWakeListener(); });
 
-  function showTyping() {
-    const div = document.createElement('div');
-    div.className = 'msg bot typing';
-    div.id = 'typing';
-    div.innerHTML = `
-      <div class="avatar">🤖</div>
-      <div class="bubble">
-        <div class="typing-dots">
-          <span></span><span></span><span></span>
-        </div>
-      </div>
-    `;
-    messagesEl.appendChild(div);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }
+// ============================================================
+//  モーダル
+// ============================================================
+function showModal(title,bodyHtml,btns){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalBody').innerHTML=bodyHtml;
+  const mb=document.getElementById('modalBtns'); mb.innerHTML='';
+  (btns||[]).forEach(b=>{ const btn=document.createElement('button'); btn.className='btn '+(b.cls||'btn-primary'); btn.textContent=b.label; btn.onclick=b.fn; mb.appendChild(btn); });
+  document.getElementById('modalBg').style.display='flex';
+}
+function closeModal(e){ if(!e||e.target===document.getElementById('modalBg')) document.getElementById('modalBg').style.display='none'; }
 
-  function removeTyping() {
-    const el = document.getElementById('typing');
-    if (el) el.remove();
-  }
+// ============================================================
+//  各機能
+// ============================================================
+async function openUnresolved(){
+  showModal('未解決一覧を取得中…','<p style="color:var(--text2);font-size:12px">読み込んでいます…</p>',[{label:'閉じる',cls:'btn-primary',fn:closeModal}]);
+  const res=await gasCall('fetchUnresolved');
+  if(!res.success||!res.data.length){ document.getElementById('modalBody').innerHTML='<p style="color:var(--text2);font-size:12px">未解決の質問はありません。</p>'; speak('未解決の質問はありません。'); return; }
+  let html='',toRead=[];
+  res.data.forEach(item=>{ html+=`<div class="list-item"><div class="no">受付番号 ${esc(item.no)}</div><div class="q">${esc(item.question)}</div><div class="meta">${esc(item.asker)} ・ ${esc(String(item.date).slice(0,16))}</div></div>`; toRead.push(`受付番号${item.no}: ${item.question}`); });
+  document.getElementById('modalTitle').textContent=`未解決一覧（${res.data.length}件）`;
+  document.getElementById('modalBody').innerHTML=html;
+  speak(toRead.join('。'));
+}
 
-  function escapeHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
+function openAnswerModal(){
+  showModal('未解決に回答する',
+    `<label style="font-size:11px;color:var(--text2)">受付番号</label>
+     <input type="number" id="answerNo" placeholder="例: 1">
+     <label style="font-size:11px;color:var(--text2)">回答内容</label>
+     <textarea id="answerText" rows="4" placeholder="回答を入力してください…" style="resize:vertical"></textarea>`,
+    [{label:'回答を登録する',cls:'btn-amber',fn:async()=>{
+      const no=document.getElementById('answerNo').value;
+      const ans=document.getElementById('answerText').value.trim();
+      if(!no||!ans){speak('受付番号と回答内容を入力してください。');return;}
+      const res=await gasCall('submitAnswer',{no,answer:ans});
+      speak(res.message); closeModal(); addMsg(res.message,'bot');
+    }},{label:'キャンセル',cls:'btn-primary',fn:closeModal}]
+  );
+}
 
-  function sendMessage() {
-    const text = inputEl.value.trim();
-    if (!text) return;
+async function openResolved(){
+  showModal('回答済み一覧を取得中…','<p style="color:var(--text2);font-size:12px">読み込んでいます…</p>',[{label:'閉じる',cls:'btn-primary',fn:closeModal}]);
+  const res=await gasCall('fetchResolved');
+  if(!res.success||!res.data.length){document.getElementById('modalBody').innerHTML='<p style="color:var(--text2);font-size:12px">回答済みの質問はありません。</p>';return;}
+  let html='';
+  res.data.forEach(item=>{html+=`<div class="list-item"><div class="no">受付番号 ${esc(item.no)}</div><div class="q">${esc(item.question)}</div><div class="meta" style="color:#7ed87e">回答: ${esc(item.answer)}</div><div class="meta">${esc(item.responder)} ・ ${esc(String(item.date).slice(0,16))}</div></div>`;});
+  document.getElementById('modalTitle').textContent=`回答済み一覧（${res.data.length}件）`;
+  document.getElementById('modalBody').innerHTML=html;
+}
 
-    // ウェルカム画面を消す
-    const welcome = messagesEl.querySelector('.welcome');
-    if (welcome) welcome.remove();
+function openFaqEdit(){
+  showModal('FAQを追加する',
+    `<label style="font-size:11px;color:var(--text2)">質問</label>
+     <input type="text" id="faqQ" placeholder="質問文を入力">
+     <label style="font-size:11px;color:var(--text2)">回答</label>
+     <textarea id="faqA" rows="3" placeholder="回答文を入力" style="resize:vertical;margin-bottom:10px"></textarea>
+     <label style="font-size:11px;color:var(--text2)">カテゴリ（任意）</label>
+     <input type="text" id="faqCat" placeholder="例: 履修・奨学金・施設">`,
+    [{label:'FAQに追加',cls:'btn-purple',fn:async()=>{
+      const q=document.getElementById('faqQ').value.trim();
+      const a=document.getElementById('faqA').value.trim();
+      const c=document.getElementById('faqCat').value.trim();
+      if(!q||!a){speak('質問と回答を入力してください。');return;}
+      const res=await gasCall('addFaq',{question:q,answer:a,category:c});
+      speak(res.message); closeModal(); addMsg(res.message,'bot');
+    }},{label:'キャンセル',cls:'btn-primary',fn:closeModal}]
+  );
+}
 
-    addMessage(text, 'user');
-    inputEl.value = '';
-    inputEl.style.height = 'auto';
-    sendBtn.disabled = true;
+function openWebSearch(prefill){
+  showModal('Webサーチ',
+    `<label style="font-size:11px;color:var(--text2)">検索キーワード</label>
+     <input type="text" id="searchQ" placeholder="検索したい内容を入力" value="${esc(prefill||'')}">`,
+    [{label:'検索する',cls:'btn-cyan',fn:async()=>{
+      const q=document.getElementById('searchQ').value.trim(); if(!q) return;
+      addMsg('🔍 「'+q+'」を検索中…','bot'); closeModal(); showTyping();
+      const res=await gasCall('webSearch',{query:q});
+      removeTyping(); addMsg(res.message,'bot'); lastBotMsg=res.message; speak(res.message);
+    }},{label:'キャンセル',cls:'btn-primary',fn:closeModal}]
+  );
+}
 
-    showTyping();
+async function runCrawl(){
+  if(!confirm('鳥取大学サイトの探索を開始しますか？\n（数分かかる場合があります）')) return;
+  addMsg('🌐 Webサイトの探索を開始しました。完了まで数分かかります…','bot');
+  speak('サイト探索を開始します。しばらくお待ちください。');
+  const res=await gasCall('crawl');
+  addMsg(res.message,'bot'); speak(res.message);
+}
 
-    // GASのchat()関数を呼び出す
-    google.script.run
-      .withSuccessHandler((res) => {
-        removeTyping();
-        addMessage(res.success ? res.message : res.message, 'bot');
-        sendBtn.disabled = false;
-        inputEl.focus();
-      })
-      .withFailureHandler((err) => {
-        removeTyping();
-        addMessage('通信エラーが発生しました。再度お試しください。', 'bot');
-        sendBtn.disabled = false;
-      })
-      .chat(text);
-  }
+async function openLogs(){
+  showModal('利用者ログを取得中…','<p style="color:var(--text2);font-size:12px">読み込んでいます…</p>',[{label:'閉じる',cls:'btn-primary',fn:closeModal}]);
+  const res=await gasCall('fetchLogs',{limit:50});
+  if(!res.success||!res.data.length){document.getElementById('modalBody').innerHTML='<p style="color:var(--text2);font-size:12px">ログがありません。</p>';return;}
+  let html='';
+  res.data.forEach(item=>{html+=`<div class="list-item"><div class="no">${esc(String(item.date).slice(0,16))} ／ ${esc(item.role)}</div><div class="q">${esc(item.action)}: ${esc(item.detail)}</div><div class="meta">${esc(item.email)}</div></div>`;});
+  document.getElementById('modalTitle').textContent=`利用者ログ（最新${res.data.length}件）`;
+  document.getElementById('modalBody').innerHTML=html;
+}
 </script>
 </body>
 </html>
