@@ -75,6 +75,27 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Segoe 
 .tts-overlay{position:absolute;inset:0;background:rgba(255,200,100,0);pointer-events:none;transition:background .1s;z-index:10}
 .tts-overlay.speaking{animation:ttsBlink .4s ease-in-out infinite}
 @keyframes ttsBlink{0%,100%{background:rgba(255,200,100,0)}50%{background:rgba(255,200,100,.08)}}
+/* ── 音声状態インジケーター ── */
+.voice-status{position:absolute;bottom:8px;left:10px;z-index:20;display:flex;align-items:center;gap:5px;pointer-events:none;transition:opacity .3s}
+.voice-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.voice-label{font-size:9px;letter-spacing:.04em;font-family:monospace}
+.vs-wake .voice-dot{background:#c8a020;box-shadow:0 0 6px #c8a02088;animation:vsPulse 2s ease-in-out infinite}
+.vs-wake .voice-label{color:#c8a020}
+.vs-listen .voice-dot{background:#e84040;box-shadow:0 0 8px #e84040cc;animation:vsPulse .5s ease-in-out infinite}
+.vs-listen .voice-label{color:#e84040}
+.vs-speak .voice-dot{background:#4080e8;box-shadow:0 0 8px #4080e8cc;animation:vsPulse .7s ease-in-out infinite}
+.vs-speak .voice-label{color:#4080e8}
+.vs-off .voice-dot{background:#3a4060}
+.vs-off .voice-label{color:#3a4060}
+@keyframes vsPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.4);opacity:.6}}
+/* ── マイク許可ダイアログ ── */
+.mic-perm{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
+.mic-perm-card{background:var(--surface2);border:1px solid var(--border2);border-radius:20px;padding:28px 24px;width:100%;max-width:340px;text-align:center}
+.mic-perm-icon{font-size:48px;margin-bottom:12px}
+.mic-perm-card h3{font-size:16px;margin-bottom:8px}
+.mic-perm-card p{font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:20px}
+.mic-perm-btns{display:flex;gap:8px;justify-content:center}
+.mic-perm-note{font-size:10px;color:var(--text3);margin-top:12px}
 .chat-area{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
 .chat-area::-webkit-scrollbar{width:3px}
 .chat-area::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
@@ -158,6 +179,10 @@ textarea::placeholder{color:var(--text3)}
   </div>
   <div class="anim-header" id="animHeader" onclick="nextPattern()">
     <div class="tts-overlay" id="ttsOverlay"></div>
+    <div class="voice-status vs-off" id="voiceStatus">
+      <div class="voice-dot"></div>
+      <span class="voice-label" id="voiceLabel">音声オフ</span>
+    </div>
   </div>
   <div class="chat-area" id="chatArea">
     <div class="msg bot">
@@ -179,6 +204,20 @@ textarea::placeholder{color:var(--text3)}
     <h3 id="modalTitle"></h3>
     <div id="modalBody"></div>
     <div class="modal-btns" id="modalBtns"></div>
+  </div>
+</div>
+
+<!-- マイク許可ダイアログ -->
+<div class="mic-perm" id="micPermDialog" style="display:none">
+  <div class="mic-perm-card">
+    <div class="mic-perm-icon">🎙️</div>
+    <h3>音声機能を使いますか？</h3>
+    <p>「ねえ、フクロウ」と話しかけることで<br>ハンズフリーで質問できます。<br>マイクへのアクセス許可が必要です。</p>
+    <div class="mic-perm-btns">
+      <button class="btn btn-primary" onclick="denyMic()">使わない</button>
+      <button class="btn btn-green" onclick="requestMic()">許可して使う</button>
+    </div>
+    <div class="mic-perm-note">後からマイクボタン🎙️でも切り替えできます</div>
   </div>
 </div>
 
@@ -212,6 +251,7 @@ let recognition   = null;
 let wakeRecog     = null;
 let isSpeaking    = false;
 let isMicOn       = false;
+let micPermGranted = false; // マイク許可状態
 const PATTERNS    = 6;
 
 // ============================================================
@@ -258,7 +298,13 @@ function startApp() {
   renderButtons();
   currentPattern = Math.floor(Math.random() * PATTERNS);
   renderPattern();
-  startWakeListener();
+  // Web Speech API 対応確認後にマイク許可ダイアログを表示
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    document.getElementById('micPermDialog').style.display = 'flex';
+  } else {
+    setVoiceStatus('off');
+  }
 }
 
 // ============================================================
@@ -267,28 +313,36 @@ function startApp() {
 function renderButtons() {
   const area = document.getElementById('btnArea');
   area.innerHTML = '';
-  const rows = [];
-  rows.push([{ label:'💬 質問する', cls:'btn-primary', fn:'sendMessage' }]);
-  if (userInfo.role === 'staff' || userInfo.role === 'admin') {
-    rows.push([
-      { label:'📋 未解決一覧を聞く', cls:'btn-green', fn:'openUnresolved' },
-      { label:'✏️ 未解決に回答する', cls:'btn-amber', fn:'openAnswerModal' },
-    ]);
-  }
-  if (userInfo.role === 'admin') {
-    rows.push([
-      { label:'✅ 回答済みを確認',  cls:'btn-cyan',   fn:'openResolved' },
-      { label:'📚 FAQを追加・編集', cls:'btn-purple',  fn:'openFaqEdit' },
-    ]);
-    rows.push([
-      { label:'🔍 Webサーチ',  cls:'btn-cyan',   fn:'openWebSearch' },
-      { label:'🌐 サイト探索', cls:'btn-purple',  fn:'runCrawl' },
-      { label:'📊 利用者ログ', cls:'btn-red',     fn:'openLogs' },
-    ]);
-  }
-  rows.forEach(row => {
+  const role = userInfo.role;
+
+  // ロール別ボタン定義（仕様書04準拠）
+  const allRows = [
+    // 全ロール共通
+    [{ label:'💬 質問する', cls:'btn-primary', fn:'sendMessage', roles:['student','staff','admin'] }],
+    // 教職員・管理者
+    [
+      { label:'📋 未解決参照', cls:'btn-green',  fn:'openUnresolved',  roles:['staff','admin'] },
+      { label:'✏️ 未解決回答', cls:'btn-amber',  fn:'openAnswerModal',  roles:['staff','admin'] },
+      { label:'✅ 回答確認',   cls:'btn-cyan',   fn:'openResolved',     roles:['staff','admin'] },
+    ],
+    [
+      { label:'📖 FAQ確認',   cls:'btn-cyan',   fn:'openFaqView',   roles:['staff','admin'] },
+      { label:'➕ FAQ追加',   cls:'btn-purple', fn:'openFaqAdd',    roles:['staff','admin'] },
+      { label:'✏️ FAQ編集',   cls:'btn-purple', fn:'openFaqEdit',   roles:['staff','admin'] },
+    ],
+    // 管理者のみ
+    [
+      { label:'🔍 個別Webサーチ', cls:'btn-cyan',   fn:'openWebSearch', roles:['admin'] },
+      { label:'🌐 階層Webサーチ', cls:'btn-purple',  fn:'runCrawl',      roles:['admin'] },
+      { label:'📊 利用者ログ',    cls:'btn-red',     fn:'openLogs',      roles:['admin'] },
+    ],
+  ];
+
+  allRows.forEach(row => {
+    const visible = row.filter(b => b.roles.includes(role));
+    if (!visible.length) return;
     const div = document.createElement('div'); div.className = 'btn-row';
-    row.forEach(b => {
+    visible.forEach(b => {
       const btn = document.createElement('button');
       btn.className = 'btn ' + b.cls;
       btn.textContent = b.label;
@@ -420,34 +474,85 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ============================================================
+//  音声状態インジケーター
+// ============================================================
+function setVoiceStatus(state) {
+  // state: 'wake' | 'listen' | 'speak' | 'off'
+  const el  = document.getElementById('voiceStatus');
+  const lbl = document.getElementById('voiceLabel');
+  if (!el) return;
+  el.className = 'voice-status vs-' + state;
+  const labels = { wake:'待機中（ねえ、フクロウ）', listen:'認識中…', speak:'読み上げ中', off:'音声オフ' };
+  lbl.textContent = labels[state] || '';
+}
+
+// ============================================================
+//  マイク許可ダイアログ
+// ============================================================
+async function requestMic() {
+  document.getElementById('micPermDialog').style.display = 'none';
+  try {
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+    micPermGranted = true;
+    addMsg('🎙️ 音声機能が有効になりました。「ねえ、フクロウ」と話しかけてください。', 'bot');
+    speak('音声機能が有効になりました。ねえ、フクロウ、と話しかけてください。');
+    startWakeListener();
+  } catch(e) {
+    micPermGranted = false;
+    addMsg('マイクへのアクセスが拒否されました。ブラウザの設定から許可してください。', 'bot');
+    setVoiceStatus('off');
+  }
+}
+function denyMic() {
+  document.getElementById('micPermDialog').style.display = 'none';
+  micPermGranted = false;
+  setVoiceStatus('off');
+  addMsg('音声機能はオフです。テキスト入力またはボタンでご利用ください。', 'bot');
+}
+
+// ============================================================
 //  TTS
 // ============================================================
 function speak(text) {
   if(!text||!window.speechSynthesis) return;
-  // Chromeのユーザー操作なし制限を回避
   if(speechSynthesis.paused) speechSynthesis.resume();
   speechSynthesis.cancel();
 
-  // 少し待ってから発話（cancel直後に speak するとChromeで無音になる対策）
   setTimeout(() => {
     const utt=new SpeechSynthesisUtterance(text);
     utt.lang='ja-JP'; utt.rate=1.0;
-    // 日本語音声を明示的に選択
     const voices = speechSynthesis.getVoices();
     const jaVoice = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja'));
     if(jaVoice) utt.voice = jaVoice;
-    utt.onstart=()=>{ isSpeaking=true; document.getElementById('ttsOverlay').classList.add('speaking'); if(recognition) try{recognition.abort();}catch(e){} };
-    utt.onend=()=>{ isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); if(!isMicOn) startWakeListener(); };
-    utt.onerror=(e)=>{ Logger && Logger.log && Logger.log('TTS error: '+e.error); isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); };
+    utt.onstart=()=>{
+      isSpeaking=true;
+      setVoiceStatus('speak');
+      document.getElementById('ttsOverlay').classList.add('speaking');
+      if(recognition) try{recognition.abort();}catch(e){}
+    };
+    utt.onend=()=>{
+      isSpeaking=false;
+      document.getElementById('ttsOverlay').classList.remove('speaking');
+      if(micPermGranted && !isMicOn) { startWakeListener(); } else { setVoiceStatus('off'); }
+    };
+    utt.onerror=()=>{
+      isSpeaking=false;
+      document.getElementById('ttsOverlay').classList.remove('speaking');
+      if(micPermGranted && !isMicOn) startWakeListener(); else setVoiceStatus('off');
+    };
     speechSynthesis.speak(utt);
   }, 100);
 }
 
-// 音声リスト読み込み（Chrome対策）
 if(window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = () => { speechSynthesis.getVoices(); };
 }
-function stopSpeak(){ speechSynthesis.cancel(); isSpeaking=false; document.getElementById('ttsOverlay').classList.remove('speaking'); }
+function stopSpeak(){
+  speechSynthesis.cancel();
+  isSpeaking=false;
+  document.getElementById('ttsOverlay').classList.remove('speaking');
+  if(micPermGranted && !isMicOn) startWakeListener(); else setVoiceStatus('off');
+}
 
 // ============================================================
 //  音声入力（ウェイクワード＋コマンド）
@@ -455,69 +560,99 @@ function stopSpeak(){ speechSynthesis.cancel(); isSpeaking=false; document.getEl
 const WAKE_VARIANTS=['ねえフクロウ','ねえ、フクロウ','ねぇフクロウ','ねぇ、フクロウ','hey fukurou'];
 
 function startWakeListener(){
+  if(!micPermGranted) return;
   if(!('webkitSpeechRecognition' in window||'SpeechRecognition' in window)) return;
   if(isMicOn||isSpeaking) return;
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   wakeRecog=new SR(); wakeRecog.lang='ja-JP'; wakeRecog.continuous=true; wakeRecog.interimResults=false;
+  wakeRecog.onstart=()=>{ setVoiceStatus('wake'); };
   wakeRecog.onresult=e=>{
     const t=e.results[e.results.length-1][0].transcript.trim().replace(/\s/g,'');
     if(WAKE_VARIANTS.some(w=>t.includes(w.replace(/\s/g,'')))){
       wakeRecog.stop(); speak('はい、どうぞ。'); setTimeout(()=>startCommandListener(),1200);
     }
   };
-  wakeRecog.onerror=()=>{};
-  wakeRecog.onend=()=>{ if(!isMicOn&&!isSpeaking) setTimeout(startWakeListener,500); };
+  wakeRecog.onerror=()=>{ setVoiceStatus('off'); };
+  wakeRecog.onend=()=>{ if(micPermGranted && !isMicOn&&!isSpeaking){ setTimeout(startWakeListener,500); } else if(!micPermGranted){ setVoiceStatus('off'); } };
   try{ wakeRecog.start(); }catch(e){}
 }
 
 function startCommandListener(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   recognition=new SR(); recognition.lang='ja-JP'; recognition.continuous=false; recognition.maxAlternatives=3;
+  recognition.onstart=()=>{ setVoiceStatus('listen'); };
   recognition.onresult=e=>{
     const candidates=Array.from(e.results[0]).map(r=>r.transcript.trim());
     let handled=false;
     for(const t of candidates){ if(handleVoiceCommand(t)){handled=true;break;} }
     if(!handled) document.getElementById('inputText').value=candidates[0];
   };
-  recognition.onend=()=>{ if(!isMicOn) startWakeListener(); };
-  recognition.onerror=()=>startWakeListener();
+  recognition.onend=()=>{ if(micPermGranted && !isMicOn) startWakeListener(); else setVoiceStatus('off'); };
+  recognition.onerror=()=>{ setVoiceStatus('off'); if(micPermGranted) setTimeout(startWakeListener,500); };
   try{ recognition.start(); }catch(e){}
 }
 
 function toggleMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ alert('音声入力はChromeで対応しています。'); return; }
+  if(!micPermGranted){
+    // 未許可の場合はダイアログを再表示
+    document.getElementById('micPermDialog').style.display='flex';
+    return;
+  }
   if(isMicOn){
     isMicOn=false; if(recognition) try{recognition.stop();}catch(e){}
-    document.getElementById('micBtn').classList.remove('listening'); startWakeListener(); return;
+    document.getElementById('micBtn').classList.remove('listening');
+    startWakeListener(); return;
   }
   isMicOn=true; document.getElementById('micBtn').classList.add('listening');
   if(wakeRecog) try{wakeRecog.stop();}catch(e){}
   recognition=new SR(); recognition.lang='ja-JP'; recognition.continuous=false; recognition.interimResults=false;
+  recognition.onstart=()=>{ setVoiceStatus('listen'); };
   recognition.onresult=e=>{ const t=e.results[0][0].transcript.trim(); if(!handleVoiceCommand(t)) document.getElementById('inputText').value=t; };
-  recognition.onend=()=>{ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); startWakeListener(); };
-  recognition.onerror=()=>{ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); startWakeListener(); };
+  recognition.onend=()=>{ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); if(micPermGranted) startWakeListener(); else setVoiceStatus('off'); };
+  recognition.onerror=()=>{ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); setVoiceStatus('off'); };
   try{ recognition.start(); }catch(e){ isMicOn=false; document.getElementById('micBtn').classList.remove('listening'); }
 }
 
+// ============================================================
+//  音声コマンド処理（仕様書04準拠・キーワードAND検出）
+// ============================================================
+function hasKeywords(text, ...keywords) {
+  // すべてのキーワードが含まれていれば true（順不同・部分一致）
+  return keywords.every(kw => text.includes(kw));
+}
+
 function handleVoiceCommand(text){
-  const t=text.replace(/\s/g,'');
-  if(/質問します|聞きたいことがある/.test(t)){ document.getElementById('inputText').focus(); toggleMic(); return true; }
-  if(/送信して|送って|お願い/.test(t)){ sendMessage(); return true; }
+  const t = text.replace(/\s/g, '');
+  const role = userInfo.role;
+
+  // ── 送信・操作系（全ロール） ──
+  if(/送信して|送って/.test(t)){ sendMessage(); return true; }
   if(/もう一度|繰り返して/.test(t)){ speak(lastBotMsg); return true; }
   if(/止めて|ストップ|停止/.test(t)){ stopSpeak(); return true; }
   if(/消して|クリア/.test(t)){ document.getElementById('inputText').value=''; return true; }
-  if(/未解決を聞かせて|未解決は/.test(t)&&(userInfo.role==='staff'||userInfo.role==='admin')){ openUnresolved(); return true; }
-  if(userInfo.role==='admin'){
-    if(/回答済みを確認|解決済みは/.test(t)){ openResolved(); return true; }
-    if(/FAQを追加|FAQ登録/.test(t)){ openFaqEdit(); return true; }
-    if(/ウェブを探索|サイトを調べて/.test(t)){ runCrawl(); return true; }
-    if(/ログを見せて|利用ログ/.test(t)){ openLogs(); return true; }
-    const sm=t.match(/(?:検索して|調べて)(.+)/); if(sm){ openWebSearch(sm[1]); return true; }
-  }
+
+  // ── 権限チェックが必要なコマンド ──
+  const staffOrAdmin = role === 'staff' || role === 'admin';
+  const isAdmin = role === 'admin';
+
+  // 教職員・管理者コマンド
+  if(hasKeywords(t, '未解決', '参照')){ if(staffOrAdmin){ openUnresolved(); } else { speak('質問してください。'); } return true; }
+  if(hasKeywords(t, '未解決', '回答')){ if(staffOrAdmin){ openAnswerModal(); } else { speak('質問してください。'); } return true; }
+  if(hasKeywords(t, '回答', '確認'))  { if(staffOrAdmin){ openResolved();    } else { speak('質問してください。'); } return true; }
+  if(hasKeywords(t, 'FAQ', '確認'))   { if(staffOrAdmin){ openFaqView();     } else { speak('質問してください。'); } return true; }
+  if(hasKeywords(t, 'FAQ', '追加'))   { if(staffOrAdmin){ openFaqAdd();      } else { speak('質問してください。'); } return true; }
+  if(hasKeywords(t, 'FAQ', '編集'))   { if(staffOrAdmin){ openFaqEdit();     } else { speak('質問してください。'); } return true; }
+
+  // 管理者のみコマンド
+  if(hasKeywords(t, '個別', 'Web', 'サーチ') || hasKeywords(t, '個別', 'ウェブ', 'サーチ')){ if(isAdmin){ openWebSearch(); } else { speak('質問してください。'); } return true; }
+  if(hasKeywords(t, '階層', 'Web', 'サーチ') || hasKeywords(t, '階層', 'ウェブ', 'サーチ')){ if(isAdmin){ runCrawl();      } else { speak('質問してください。'); } return true; }
+  if(hasKeywords(t, '利用', '参照'))  { if(isAdmin){ openLogs();       } else { speak('質問してください。'); } return true; }
+
   return false;
 }
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&!isMicOn&&!isSpeaking) startWakeListener(); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&micPermGranted&&!isMicOn&&!isSpeaking) startWakeListener(); });
 
 // ============================================================
 //  モーダル
@@ -571,44 +706,104 @@ async function openResolved(){
   document.getElementById('modalBody').innerHTML=html;
 }
 
-function openFaqEdit(){
+// FAQ確認（一覧表示）
+async function openFaqView(){
+  showModal('FAQ一覧を取得中…','<p style="color:var(--text2);font-size:12px">読み込んでいます…</p>',[{label:'閉じる',cls:'btn-primary',fn:closeModal}]);
+  const res=await gasCall('fetchFaq');
+  if(!res.success||!res.data||!res.data.length){ document.getElementById('modalBody').innerHTML='<p style="color:var(--text2);font-size:12px">FAQが登録されていません。</p>'; return; }
+  let html='';
+  res.data.forEach(item=>{
+    html+=`<div class="list-item">
+      <div class="no">${esc(item.category||'未分類')} ／ ${esc(item.status||'有効')}</div>
+      <div class="q">${esc(item.question)}</div>
+      <div class="meta" style="color:#a78bfa">${esc(item.answer)}</div>
+      <div class="meta">${esc(item.source||'')} ${item.date?'・'+esc(String(item.date).slice(0,10)):''}</div>
+    </div>`;
+  });
+  document.getElementById('modalTitle').textContent=`FAQ一覧（${res.data.length}件）`;
+  document.getElementById('modalBody').innerHTML=html;
+}
+
+// FAQ追加
+function openFaqAdd(){
   showModal('FAQを追加する',
     `<label style="font-size:11px;color:var(--text2)">質問</label>
      <input type="text" id="faqQ" placeholder="質問文を入力">
      <label style="font-size:11px;color:var(--text2)">回答</label>
      <textarea id="faqA" rows="3" placeholder="回答文を入力" style="resize:vertical;margin-bottom:10px"></textarea>
      <label style="font-size:11px;color:var(--text2)">カテゴリ（任意）</label>
-     <input type="text" id="faqCat" placeholder="例: 履修・奨学金・施設">`,
+     <input type="text" id="faqCat" placeholder="例: 履修・奨学金・施設">
+     <label style="font-size:11px;color:var(--text2);margin-top:8px">対象</label>
+     <select id="faqTarget" style="background:var(--surface3);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px">
+       <option value="全員">全員</option><option value="学生">学生</option><option value="職員">職員</option>
+     </select>`,
     [{label:'FAQに追加',cls:'btn-purple',fn:async()=>{
       const q=document.getElementById('faqQ').value.trim();
       const a=document.getElementById('faqA').value.trim();
       const c=document.getElementById('faqCat').value.trim();
+      const tg=document.getElementById('faqTarget').value;
       if(!q||!a){speak('質問と回答を入力してください。');return;}
-      const res=await gasCall('addFaq',{question:q,answer:a,category:c});
+      const res=await gasCall('addFaq',{question:q,answer:a,category:c,target:tg});
       speak(res.message); closeModal(); addMsg(res.message,'bot');
     }},{label:'キャンセル',cls:'btn-primary',fn:closeModal}]
   );
 }
 
+// FAQ編集（受付番号指定）
+function openFaqEdit(){
+  showModal('FAQを編集する',
+    `<label style="font-size:11px;color:var(--text2)">FAQ番号</label>
+     <input type="number" id="faqNo" placeholder="例: 3">
+     <label style="font-size:11px;color:var(--text2)">新しい質問文（変更する場合）</label>
+     <input type="text" id="faqQEdit" placeholder="空欄のままで変更なし">
+     <label style="font-size:11px;color:var(--text2)">新しい回答文（変更する場合）</label>
+     <textarea id="faqAEdit" rows="3" placeholder="空欄のままで変更なし" style="resize:vertical;margin-bottom:10px"></textarea>
+     <label style="font-size:11px;color:var(--text2)">ステータス</label>
+     <select id="faqStatus" style="background:var(--surface3);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:12px">
+       <option value="">変更なし</option><option value="有効">有効</option><option value="無効">無効</option>
+     </select>`,
+    [{label:'変更を保存',cls:'btn-purple',fn:async()=>{
+      const no=document.getElementById('faqNo').value;
+      const q=document.getElementById('faqQEdit').value.trim();
+      const a=document.getElementById('faqAEdit').value.trim();
+      const s=document.getElementById('faqStatus').value;
+      if(!no){speak('FAQ番号を入力してください。');return;}
+      const res=await gasCall('editFaq',{no,question:q||null,answer:a||null,status:s||null});
+      speak(res.message); closeModal(); addMsg(res.message,'bot');
+    }},{label:'キャンセル',cls:'btn-primary',fn:closeModal}]
+  );
+}
+
+// 個別Webサーチ
 function openWebSearch(prefill){
-  showModal('Webサーチ',
-    `<label style="font-size:11px;color:var(--text2)">検索キーワード</label>
+  showModal('個別Webサーチ',
+    `<p style="font-size:11px;color:var(--text2);margin-bottom:8px">1つのキーワードで検索し、FAQに編成します。</p>
+     <label style="font-size:11px;color:var(--text2)">検索キーワード</label>
      <input type="text" id="searchQ" placeholder="検索したい内容を入力" value="${esc(prefill||'')}">`,
     [{label:'検索する',cls:'btn-cyan',fn:async()=>{
       const q=document.getElementById('searchQ').value.trim(); if(!q) return;
-      addMsg('🔍 「'+q+'」を検索中…','bot'); closeModal(); showTyping();
-      const res=await gasCall('webSearch',{query:q});
+      addMsg('🔍 「'+q+'」を個別検索中…','bot'); closeModal(); showTyping();
+      const res=await gasCall('webSearch',{query:q,mode:'single'});
       removeTyping(); addMsg(res.message,'bot'); lastBotMsg=res.message; speak(res.message);
     }},{label:'キャンセル',cls:'btn-primary',fn:closeModal}]
   );
 }
 
+// 階層Webサーチ
 async function runCrawl(){
-  if(!confirm('鳥取大学サイトの探索を開始しますか？\n（数分かかる場合があります）')) return;
-  addMsg('🌐 Webサイトの探索を開始しました。完了まで数分かかります…','bot');
-  speak('サイト探索を開始します。しばらくお待ちください。');
-  const res=await gasCall('crawl');
-  addMsg(res.message,'bot'); speak(res.message);
+  showModal('階層Webサーチ',
+    `<p style="font-size:11px;color:var(--text2);margin-bottom:8px">鳥取大学サイトを階層的に探索しFAQを編成します。<br>完了まで数分かかる場合があります。</p>
+     <label style="font-size:11px;color:var(--text2)">起点URL（任意）</label>
+     <input type="text" id="crawlUrl" placeholder="例: https://www.tottori-u.ac.jp" value="https://www.tottori-u.ac.jp">`,
+    [{label:'探索開始',cls:'btn-purple',fn:async()=>{
+      const url=document.getElementById('crawlUrl').value.trim();
+      addMsg('🌐 階層Webサーチを開始しました。完了まで数分かかります…','bot');
+      speak('サイト探索を開始します。しばらくお待ちください。');
+      closeModal();
+      const res=await gasCall('crawl',{startUrl:url,mode:'hierarchical'});
+      addMsg(res.message,'bot'); speak(res.message);
+    }},{label:'キャンセル',cls:'btn-primary',fn:closeModal}]
+  );
 }
 
 async function openLogs(){
