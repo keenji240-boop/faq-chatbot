@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>鳥取大学 FAQアシスタント</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
 <style>
 /* ── CSS変数 ── */
 :root{
@@ -273,7 +273,10 @@ textarea{resize:vertical;min-height:80px}
       <span class="role-badge badge-general" id="roleBadge">一般</span>
       <span class="mask-email" id="maskEmail"></span>
     </div>
-    <button class="btn btn-ghost btn-sm" id="logoutBtn" style="display:none" onclick="C_logout()">ログアウト</button>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="btn btn-primary btn-sm" id="loginBtn" style="display:none" onclick="C_signIn()">🔑 ログイン</button>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn" style="display:none" onclick="C_logout()">ログアウト</button>
+    </div>
   </div>
 
   <!-- メインレイアウト -->
@@ -333,7 +336,8 @@ textarea{resize:vertical;min-height:80px}
 // ============================================================
 //  定数・状態変数
 // ============================================================
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwxHCEMnTELSIOmmiZLc2q37ugzy9j3cT6jxWXumvXAci2UVcaQWnmmCnzDZpjOeL_gNA/exec';
+const GAS_URL    = 'https://script.google.com/macros/s/AKfycbwxHCEMnTELSIOmmiZLc2q37ugzy9j3cT6jxWXumvXAci2UVcaQWnmmCnzDZpjOeL_gNA/exec';
+const GSI_CLIENT_ID = 'YOUR_GSI_CLIENT_ID'; // Google Cloud コンソールのOAuth 2.0クライアントIDを入力
 
 let userEmail      = '';
 let userRole       = 'general';
@@ -362,17 +366,25 @@ window.addEventListener('load', () => {
   C_adjustLayout();
   window.addEventListener('resize', C_adjustLayout);
 
-  // GSI初期化（async defer のため polling で待機・最大5秒）
-  let _gsiPollCount = 0;
-  const _gsiTimer = setTimeout(C_onGsiTimeout, 5000);
-  const _gsiPoll = setInterval(() => {
-    _gsiPollCount++;
-    if (window.google && window.google.accounts && window.google.accounts.id) {
-      clearInterval(_gsiPoll);
-      C_initGSI(_gsiTimer);
-    } else if (_gsiPollCount > 50) {
-      // 5秒経過しても読み込めなければタイムアウト
-      clearInterval(_gsiPoll);
+  // Google API Client 初期化（polling で待機・最大5秒）
+  let _gapiPollCount = 0;
+  const _gapiTimer = setTimeout(C_onGsiTimeout, 5000);
+  const _gapiPoll = setInterval(() => {
+    _gapiPollCount++;
+    if (window.gapi) {
+      clearInterval(_gapiPoll);
+      gapi.load('auth2', () => {
+        gapi.auth2.init({ client_id: GSI_CLIENT_ID }).then(() => {
+          clearTimeout(_gapiTimer);
+          C_checkSignIn();
+        }).catch(e => {
+          clearTimeout(_gapiTimer);
+          C_addMsg('error', 'Google認証初期化エラー: ' + e.error);
+          C_onGsiTimeout();
+        });
+      });
+    } else if (_gapiPollCount > 50) {
+      clearInterval(_gapiPoll);
     }
   }, 100);
 });
@@ -384,35 +396,46 @@ function C_adjustLayout() {
 }
 
 // ============================================================
-//  GSI認証
+//  Google OAuth2認証
 // ============================================================
-function C_initGSI(timer) {
-  const clientId = SETTINGS.GSI_CLIENT_ID || '';
-  google.accounts.id.initialize({
-    client_id: clientId,
-    callback: (res) => { clearTimeout(timer); C_handleCredential(res); },
-    auto_select: true,
-    cancel_on_tap_outside: false
-  });
-  google.accounts.id.prompt();
+
+// サインイン状態チェック（ページロード時）
+function C_checkSignIn() {
+  const auth2 = gapi.auth2.getAuthInstance();
+  if (auth2.isSignedIn.get()) {
+    // 既存セッションあり
+    const user  = auth2.currentUser.get();
+    userEmail   = user.getBasicProfile().getEmail();
+    C_onSignedIn();
+  } else {
+    // 未サインイン → 一般ロールで起動しサインインボタンを表示
+    C_onGsiTimeout();
+  }
 }
 
-function C_handleCredential(response) {
-  try {
-    // JWT の2番目のセグメントをBase64デコード（パディング補正あり）
-    const b64 = response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
-    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
-    const payload = JSON.parse(decodeURIComponent(escape(atob(padded))));
-    userEmail = payload.email || '';
-    C_addMsg('system', '[GSI] email取得: ' + (userEmail || '（空）'));
-  } catch(e) {
-    C_addMsg('error', '[GSI] JWTデコードエラー: ' + e.message);
-    userEmail = '';
-  }
+// サインインボタン押下
+function C_signIn() {
+  const auth2 = gapi.auth2.getAuthInstance();
+  auth2.signIn({ prompt: 'select_account' }).then(() => {
+    const user = auth2.currentUser.get();
+    userEmail  = user.getBasicProfile().getEmail();
+    C_onSignedIn();
+  }).catch(e => {
+    if (e.error !== 'popup_closed_by_user') {
+      C_addMsg('error', 'ログインエラー: ' + (e.error || e.message || JSON.stringify(e)));
+    }
+  });
+}
+
+// サインイン成功時の処理
+function C_onSignedIn() {
   C_gasCall({ action:'getUser', email:userEmail }, (res) => {
-    C_addMsg('system', '[GAS] getUser応答: ' + JSON.stringify(res));
     userRole = res.role || 'general';
     C_renderTopbar(res);
+    // ログイン中メッセージを置き換え
+    const loading = document.querySelector('.msg-loading');
+    if (loading) loading.closest('.msg-row') && loading.closest('.msg-row').remove();
+    C_addMsg('system', (res.displayRole || '一般') + 'としてログインしました。');
     C_startApp();
   });
 }
@@ -434,11 +457,16 @@ function C_renderTopbar(info) {
   badge.className   = 'role-badge ' + (clsMap[info.role] || 'badge-general');
   document.getElementById('maskEmail').textContent = info.maskedEmail || '';
   document.getElementById('logoutBtn').style.display = info.role !== 'general' ? 'block' : 'none';
+  document.getElementById('loginBtn').style.display  = info.role === 'general' ? 'block' : 'none';
 }
 
 function C_logout() {
-  if (window.google && google.accounts) google.accounts.id.disableAutoSelect();
-  location.reload();
+  if (window.gapi && gapi.auth2) {
+    const auth2 = gapi.auth2.getAuthInstance();
+    auth2.signOut().then(() => location.reload());
+  } else {
+    location.reload();
+  }
 }
 
 // ============================================================
