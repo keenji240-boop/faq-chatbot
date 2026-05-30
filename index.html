@@ -817,6 +817,8 @@ function C_gasCall(params, callback) {
   })
   .then(r => r.text())
   .then(text => {
+    // デバッグ：チャットにレスポンス生データを表示
+    C_addMsg('system', '[DEBUG] ' + text.slice(0, 200));
     try {
       const data = JSON.parse(text);
       callback && callback(data);
