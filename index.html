@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>鳥取大学 FAQアシスタント</title>
-<script src="https://apis.google.com/js/api.js" async defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 /* ── CSS変数 ── */
 :root{
@@ -366,25 +366,18 @@ window.addEventListener('load', () => {
   C_adjustLayout();
   window.addEventListener('resize', C_adjustLayout);
 
-  // Google API Client 初期化（polling で待機・最大5秒）
-  let _gapiPollCount = 0;
-  const _gapiTimer = setTimeout(C_onGsiTimeout, 5000);
-  const _gapiPoll = setInterval(() => {
-    _gapiPollCount++;
-    if (window.gapi) {
-      clearInterval(_gapiPoll);
-      gapi.load('auth2', () => {
-        gapi.auth2.init({ client_id: GSI_CLIENT_ID }).then(() => {
-          clearTimeout(_gapiTimer);
-          C_checkSignIn();
-        }).catch(e => {
-          clearTimeout(_gapiTimer);
-          C_addMsg('error', 'Google認証初期化エラー: ' + e.error);
-          C_onGsiTimeout();
-        });
-      });
-    } else if (_gapiPollCount > 50) {
-      clearInterval(_gapiPoll);
+  // GSI client 初期化（polling で待機・最大5秒）
+  let _gsiPollCount = 0;
+  const _gsiTimer = setTimeout(C_onGsiTimeout, 5000);
+  const _gsiPoll = setInterval(() => {
+    _gsiPollCount++;
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+      clearInterval(_gsiPoll);
+      clearTimeout(_gsiTimer);
+      // 既存トークンチェック不要 → 一般ロールで起動しログインボタンを表示
+      C_onGsiTimeout();
+    } else if (_gsiPollCount > 50) {
+      clearInterval(_gsiPoll);
     }
   }, 100);
 });
@@ -396,35 +389,42 @@ function C_adjustLayout() {
 }
 
 // ============================================================
-//  Google OAuth2認証
+//  Google OAuth2認証（GSI tokenフロー・組織アカウント対応）
 // ============================================================
 
-// サインイン状態チェック（ページロード時）
-function C_checkSignIn() {
-  const auth2 = gapi.auth2.getAuthInstance();
-  if (auth2.isSignedIn.get()) {
-    // 既存セッションあり
-    const user  = auth2.currentUser.get();
-    userEmail   = user.getBasicProfile().getEmail();
-    C_onSignedIn();
-  } else {
-    // 未サインイン → 一般ロールで起動しサインインボタンを表示
-    C_onGsiTimeout();
-  }
-}
+let _tokenClient = null;
 
 // サインインボタン押下
 function C_signIn() {
-  const auth2 = gapi.auth2.getAuthInstance();
-  auth2.signIn({ prompt: 'select_account' }).then(() => {
-    const user = auth2.currentUser.get();
-    userEmail  = user.getBasicProfile().getEmail();
-    C_onSignedIn();
-  }).catch(e => {
-    if (e.error !== 'popup_closed_by_user') {
-      C_addMsg('error', 'ログインエラー: ' + (e.error || e.message || JSON.stringify(e)));
-    }
-  });
+  if (!window.google || !google.accounts || !google.accounts.oauth2) {
+    C_addMsg('error', 'Google認証ライブラリが読み込まれていません。ページを再読み込みしてください。');
+    return;
+  }
+  if (!_tokenClient) {
+    _tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GSI_CLIENT_ID,
+      scope: 'email profile',
+      callback: (tokenResponse) => {
+        if (tokenResponse.error) {
+          C_addMsg('error', 'ログインエラー: ' + tokenResponse.error);
+          return;
+        }
+        // アクセストークンでメアドを取得
+        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
+        })
+        .then(r => r.json())
+        .then(info => {
+          userEmail = info.email || '';
+          C_onSignedIn();
+        })
+        .catch(e => {
+          C_addMsg('error', 'ユーザー情報の取得に失敗しました: ' + e.message);
+        });
+      }
+    });
+  }
+  _tokenClient.requestAccessToken({ prompt: 'select_account' });
 }
 
 // サインイン成功時の処理
@@ -432,11 +432,11 @@ function C_onSignedIn() {
   C_gasCall({ action:'getUser', email:userEmail }, (res) => {
     userRole = res.role || 'general';
     C_renderTopbar(res);
-    // ログイン中メッセージを置き換え
-    const loading = document.querySelector('.msg-loading');
-    if (loading) loading.closest('.msg-row') && loading.closest('.msg-row').remove();
     C_addMsg('system', (res.displayRole || '一般') + 'としてログインしました。');
-    C_startApp();
+    // コマンド・ボタンを再描画
+    C_gasCall({ action:'getCommands', role:userRole }, (r) => {
+      if (r.success) { COMMANDS = r.commands || []; C_renderButtons(); }
+    });
   });
 }
 
@@ -461,12 +461,12 @@ function C_renderTopbar(info) {
 }
 
 function C_logout() {
-  if (window.gapi && gapi.auth2) {
-    const auth2 = gapi.auth2.getAuthInstance();
-    auth2.signOut().then(() => location.reload());
-  } else {
-    location.reload();
-  }
+  // tokenフローはサーバーセッションなし → リロードで一般ロールに戻る
+  userEmail = '';
+  userRole  = 'general';
+  C_renderTopbar({ role:'general', maskedEmail:'', displayRole:'一般' });
+  C_renderButtons();
+  C_addMsg('system', 'ログアウトしました。');
 }
 
 // ============================================================
