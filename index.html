@@ -399,10 +399,18 @@ function C_initGSI(timer) {
 
 function C_handleCredential(response) {
   try {
-    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    // JWT の2番目のセグメントをBase64デコード（パディング補正あり）
+    const b64 = response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    const padded = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
+    const payload = JSON.parse(decodeURIComponent(escape(atob(padded))));
     userEmail = payload.email || '';
-  } catch(e) { userEmail = ''; }
+    C_addMsg('system', '[GSI] email取得: ' + (userEmail || '（空）'));
+  } catch(e) {
+    C_addMsg('error', '[GSI] JWTデコードエラー: ' + e.message);
+    userEmail = '';
+  }
   C_gasCall({ action:'getUser', email:userEmail }, (res) => {
+    C_addMsg('system', '[GAS] getUser応答: ' + JSON.stringify(res));
     userRole = res.role || 'general';
     C_renderTopbar(res);
     C_startApp();
@@ -844,6 +852,7 @@ function C_sendMessage() {
   const loadRow = C_addMsg('loading', '', true);
   C_gasCall({ action:'chat', email:userEmail, role:userRole, text }, (res) => {
     loadRow.remove();
+    C_addMsg('system', '[DEBUG chat] ' + JSON.stringify(res).slice(0,150));
     if (!res.success) { C_addMsg('error', res.message || 'エラーが発生しました。'); return; }
     switch(res.type) {
       case 'faq':
