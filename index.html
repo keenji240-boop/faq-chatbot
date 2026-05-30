@@ -805,14 +805,26 @@ function C_sendMessage() {
 //  GAS通信共通
 // ============================================================
 function C_gasCall(params, callback) {
+  // GAS Web App は JSON POST を直接受け付けないため
+  // payload を JSON文字列にしてフォームデータとして送信する
+  const formData = new FormData();
+  formData.append('payload', JSON.stringify(params));
+
   fetch(GAS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-    mode: 'cors'
+    body: formData,
+    redirect: 'follow'
   })
-  .then(r => r.json())
-  .then(data => callback && callback(data))
+  .then(r => r.text())
+  .then(text => {
+    try {
+      const data = JSON.parse(text);
+      callback && callback(data);
+    } catch(e) {
+      C_addMsg('error','サーバーからの応答を解析できませんでした。');
+      console.error('GAS parse error:', text);
+    }
+  })
   .catch(e => {
     C_addMsg('error','サーバーとの通信でエラーが発生しました。しばらく待ってからもう一度お試しください。');
     console.error('GAS Error:', e);
