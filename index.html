@@ -880,7 +880,6 @@ function C_sendMessage() {
   const loadRow = C_addMsg('loading', '', true);
   C_gasCall({ action:'chat', email:userEmail, role:userRole, text }, (res) => {
     loadRow.remove();
-    C_addMsg('system', '[DEBUG chat] ' + JSON.stringify(res).slice(0,150));
     if (!res.success) { C_addMsg('error', res.message || 'エラーが発生しました。'); return; }
     switch(res.type) {
       case 'faq':
