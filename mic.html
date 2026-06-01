@@ -30,7 +30,7 @@ button.active{background:#e84040;color:#fff;animation:pulse .8s infinite}
 <script>
 // 親ウィンドウのオリジン（GAS Web App）
 // GASのURLを設定（デプロイ後に変更）
-const PARENT_ORIGIN = '*'; // テスト用は * 、本番はGASのURLに変更
+const PARENT_ORIGIN = '*'; // GASのURLは動的なため * を使用
 
 let recognition = null;
 let isMicOn     = false;
@@ -51,9 +51,13 @@ window.addEventListener('message', (e) => {
   }
 });
 
-// 親にメッセージを送る
+// 親にメッセージを送る（ポップアップ・iframe両対応）
 function sendToParent(data) {
-  window.parent.postMessage(data, PARENT_ORIGIN);
+  if (window.opener && !window.opener.closed) {
+    window.opener.postMessage(data, PARENT_ORIGIN);
+  } else {
+    window.parent.postMessage(data, PARENT_ORIGIN);
+  }
 }
 
 // ステータス表示
