@@ -102,7 +102,7 @@ function startMic() {
       };
       recognition.onresult = (e) => {
         const text = e.results[0][0].transcript.trim();
-        setStatus('送信中…');
+        setStatus('認識: 「' + text + '」');
         sendToParent({ type:'VOICE_TEXT', text });
       };
       recognition.onend = () => {
