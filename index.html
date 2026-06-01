@@ -323,9 +323,6 @@ textarea{resize:vertical;min-height:80px}
   </div>
 </div>
 
-<!-- 認証用非表示iframe -->
-<iframe id="authFrame" src="" style="display:none" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
-
 <!-- モーダル -->
 <div id="modalOverlay">
   <div id="modalCard">
@@ -397,29 +394,38 @@ function C_adjustLayout() {
 //  Google OAuth2認証（GSI tokenフロー・組織アカウント対応）
 // ============================================================
 
-// 自動認証（非表示iframeで起動）
+// 自動認証（ページロード時にポップアップを試みる）
 function C_startAutoAuth() {
   if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
-    // AUTH_APP_URL未設定 → 一般ロールで起動
     C_onGsiTimeout();
     return;
   }
-  // 5秒タイムアウト
-  const authTimer = setTimeout(() => {
-    C_showEmailInputModal();
-  }, 5000);
-  // postMessageを一度だけ受け取ったらタイマーをクリア
-  const handler = (e) => {
-    if (e.data && e.data.type === 'AUTH_RESULT') {
-      clearTimeout(authTimer);
-      window.removeEventListener('message', handler);
-    }
-  };
-  window.addEventListener('message', handler);
-  // iframeにAuthApp URLをセット
   const origin = encodeURIComponent(location.origin);
-  const frame  = document.getElementById('authFrame');
-  frame.src    = AUTH_APP_URL + '?origin=' + origin;
+  const url    = AUTH_APP_URL + '?origin=' + origin;
+
+  // ポップアップを試みる
+  const popup = window.open(url, 'authPopup', 'width=1,height=1,left=-1000,top=-1000');
+  if (popup) {
+    // ポップアップ成功 → 最小サイズで開いてすぐ処理
+    // 10秒タイムアウト
+    const authTimer = setTimeout(() => {
+      try { popup.close(); } catch(e) {}
+      C_showEmailInputModal();
+    }, 10000);
+    const handler = (e) => {
+      if (e.data && e.data.type === 'AUTH_RESULT') {
+        clearTimeout(authTimer);
+        window.removeEventListener('message', handler);
+        try { popup.close(); } catch(e) {}
+      }
+    };
+    window.addEventListener('message', handler);
+  } else {
+    // ポップアップブロック → ログインボタンを表示
+    C_onGsiTimeout();
+    C_addMsg('system', 'ログインボタンを押してください。');
+    document.getElementById('loginBtn').style.display = 'block';
+  }
 }
 
 // 再ログインボタン押下（ロール切替時など）
