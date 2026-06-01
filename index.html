@@ -380,35 +380,17 @@ function C_adjustLayout() {
 //  Google OAuth2認証（GSI tokenフロー・組織アカウント対応）
 // ============================================================
 
-// 自動認証（sessionStorage + URLパラメータ）
+// 自動認証（sessionStorageから読む・なければ手動入力）
 function C_startAutoAuth() {
-  // 1. URLパラメータにメアドがあれば保存して使う（AuthAppからのリダイレクト）
-  const params     = new URLSearchParams(location.search);
-  const emailParam = params.get('email');
-  if (emailParam) {
-    userEmail = emailParam;
-    // sessionStorageに保存（タブを閉じるまで有効）
-    sessionStorage.setItem('userEmail', emailParam);
-    // URLをきれいにする
-    history.replaceState({}, '', location.pathname);
-    C_onSignedIn();
-    return;
-  }
-
-  // 2. sessionStorageにメアドがあれば使う（リダイレクト不要）
+  // sessionStorageにメアドが保存されていれば使う
   const savedEmail = sessionStorage.getItem('userEmail');
   if (savedEmail) {
     userEmail = savedEmail;
     C_onSignedIn();
     return;
   }
-
-  // 3. どちらもなければAuthAppにリダイレクト（初回のみ）
-  if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
-    C_onGsiTimeout();
-    return;
-  }
-  location.href = AUTH_APP_URL;
+  // なければ手動入力モーダルを表示
+  C_showEmailInputModal();
 }
 
 // 再ログインボタン押下
@@ -418,6 +400,8 @@ function C_signIn() {
 
 // サインイン成功時の処理
 function C_onSignedIn() {
+  // sessionStorageに保存（タブを閉じるまで有効）
+  if (userEmail) sessionStorage.setItem('userEmail', userEmail);
   C_gasCall({ action:'getUser', email:userEmail }, (res) => {
     userRole = res.role || 'general';
     C_renderTopbar(res);
@@ -809,19 +793,24 @@ function C_detectCommand(text) {
 // ============================================================
 // ユーザー操作フラグ（Chrome Autoplay Policy 対策）
 let _userInteracted = false;
-document.addEventListener('click',    () => { _userInteracted = true; }, { once: false, passive: true });
-document.addEventListener('keydown',  () => { _userInteracted = true; }, { once: false, passive: true });
-document.addEventListener('touchend', () => { _userInteracted = true; }, { once: false, passive: true });
-
-// TTSキュー（操作前に呼ばれた場合はキューに積んで操作後に再生）
 let _ttsQueue = [];
-let _ttsReady = false;
+
+['click','keydown','touchend'].forEach(ev =>
+  document.addEventListener(ev, () => {
+    _userInteracted = true;
+    // 操作発生時にキューを再生
+    if (_ttsQueue.length > 0 && !isSpeaking) {
+      const next = _ttsQueue.shift();
+      setTimeout(() => _doSpeak(next), 200);
+    }
+  }, { passive: true })
+);
 
 function C_speak(text) {
   if (!text || !window.speechSynthesis) return;
   if (!_userInteracted) {
-    // ユーザー操作前はキューに積む
-    _ttsQueue.push(text);
+    // ユーザー操作前はキューに積む（最新1件だけ保持）
+    _ttsQueue = [text];
     return;
   }
   _doSpeak(text);
@@ -829,49 +818,38 @@ function C_speak(text) {
 
 function _doSpeak(text) {
   if (!text || !window.speechSynthesis) return;
+  // 既に再生中なら停止してから再生
   speechSynthesis.cancel();
+  isSpeaking = true; // cancelの直後にフラグを立てる（リスナー起動防止）
+  C_setVoiceStatus('speak');
+  if (recognition) try { recognition.abort(); } catch(e) {}
+
   setTimeout(() => {
     const utt = new SpeechSynthesisUtterance(text);
-    utt.lang  = SETTINGS.TTS_LANG || 'ja-JP';
-    utt.rate  = parseFloat(SETTINGS.TTS_RATE || '1.0');
-    // Chrome バグ対策：voiceschanged 後に再取得
+    utt.lang = SETTINGS.TTS_LANG || 'ja-JP';
+    utt.rate = parseFloat(SETTINGS.TTS_RATE || '1.0');
     const voices = speechSynthesis.getVoices();
     const ja = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja'));
     if (ja) utt.voice = ja;
-    utt.onstart = () => {
-      isSpeaking = true;
-      C_setVoiceStatus('speak');
-      if (recognition) try { recognition.abort(); } catch(e) {}
-    };
     utt.onend = () => {
       isSpeaking = false;
-      // キューに残りがあれば続けて再生
       if (_ttsQueue.length > 0) {
         const next = _ttsQueue.shift();
         setTimeout(() => _doSpeak(next), 100);
         return;
       }
-      if (micPermGranted && !isMicOn) C_startWakeListener();
+      if (micPermGranted && !isMicOn) setTimeout(C_startWakeListener, 300);
       else C_setVoiceStatus('off');
     };
     utt.onerror = (e) => {
       isSpeaking = false;
+      if (e.error === 'interrupted') return; // 正常停止は無視
       C_setVoiceStatus('off');
-      // interrupted は正常停止なので無視
-      if (e.error !== 'interrupted') console.warn('TTS error:', e.error);
+      if (micPermGranted && !isMicOn) setTimeout(C_startWakeListener, 300);
     };
     speechSynthesis.speak(utt);
-  }, 150);
+  }, 200);
 }
-
-// ユーザー操作発生時にキュー再生
-document.addEventListener('click', () => {
-  if (!_ttsReady && _ttsQueue.length > 0) {
-    _ttsReady = true;
-    const next = _ttsQueue.shift();
-    setTimeout(() => _doSpeak(next), 200);
-  }
-}, { passive: true });
 function C_stopSpeak() {
   speechSynthesis.cancel(); isSpeaking = false;
   if (micPermGranted && !isMicOn) C_startWakeListener(); else C_setVoiceStatus('off');
