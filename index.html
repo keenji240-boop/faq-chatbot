@@ -380,27 +380,27 @@ function C_adjustLayout() {
 //  Google OAuth2認証（GSI tokenフロー・組織アカウント対応）
 // ============================================================
 
-// 自動認証（fetchでメアドを直接取得）
+// 自動認証（URLパラメータからメアドを読む）
 function C_startAutoAuth() {
+  // URLパラメータにメアドがあれば使う（AuthAppからのリダイレクト）
+  const params = new URLSearchParams(location.search);
+  const emailParam = params.get('email');
+  if (emailParam) {
+    userEmail = emailParam;
+    // URLからemailパラメータを消す（履歴に残らないように）
+    const cleanUrl = location.pathname;
+    history.replaceState({}, '', cleanUrl);
+    C_onSignedIn();
+    return;
+  }
+
+  // URLパラメータがない場合はAuthAppにリダイレクト
   if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
     C_onGsiTimeout();
     return;
   }
-  fetch(AUTH_APP_URL, { redirect: 'follow' })
-    .then(r => r.json())
-    .then(data => {
-      if (data.email) {
-        userEmail = data.email;
-        C_onSignedIn();
-      } else {
-        // メアド取得失敗 → 手動入力
-        C_showEmailInputModal();
-      }
-    })
-    .catch(() => {
-      // 通信エラー → 手動入力
-      C_showEmailInputModal();
-    });
+  // AuthAppにリダイレクト（同じタブで遷移・別画面なし）
+  location.href = AUTH_APP_URL;
 }
 
 // 再ログインボタン押下
