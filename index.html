@@ -366,21 +366,7 @@ window.addEventListener('load', () => {
   C_adjustLayout();
   window.addEventListener('resize', C_adjustLayout);
 
-  // postMessageでAuthAppからメアドを受け取るリスナー
-  window.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'AUTH_RESULT') {
-      if (e.data.email) {
-        // メアドが取れれば全員受け入れ（ロール判定はGAS側で実施）
-        userEmail = e.data.email;
-        C_onSignedIn();
-      } else {
-        // メアド取得失敗 → 手動入力モーダルを表示
-        C_showEmailInputModal();
-      }
-    }
-  });
-
-  // AuthAppを非表示iframeで自動起動
+  // AuthAppにfetchでメアドを取得
   C_startAutoAuth();
 });
 
@@ -394,49 +380,32 @@ function C_adjustLayout() {
 //  Google OAuth2認証（GSI tokenフロー・組織アカウント対応）
 // ============================================================
 
-// 自動認証（ページロード時にポップアップを試みる）
+// 自動認証（fetchでメアドを直接取得）
 function C_startAutoAuth() {
   if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
     C_onGsiTimeout();
     return;
   }
-  const origin = encodeURIComponent(location.origin);
-  const url    = AUTH_APP_URL + '?origin=' + origin;
-
-  // ポップアップを試みる
-  const popup = window.open(url, 'authPopup', 'width=1,height=1,left=-1000,top=-1000');
-  if (popup) {
-    // ポップアップ成功 → 最小サイズで開いてすぐ処理
-    // 10秒タイムアウト
-    const authTimer = setTimeout(() => {
-      try { popup.close(); } catch(e) {}
-      C_showEmailInputModal();
-    }, 10000);
-    const handler = (e) => {
-      if (e.data && e.data.type === 'AUTH_RESULT') {
-        clearTimeout(authTimer);
-        window.removeEventListener('message', handler);
-        try { popup.close(); } catch(e) {}
+  fetch(AUTH_APP_URL, { redirect: 'follow' })
+    .then(r => r.json())
+    .then(data => {
+      if (data.email) {
+        userEmail = data.email;
+        C_onSignedIn();
+      } else {
+        // メアド取得失敗 → 手動入力
+        C_showEmailInputModal();
       }
-    };
-    window.addEventListener('message', handler);
-  } else {
-    // ポップアップブロック → ログインボタンを表示
-    C_onGsiTimeout();
-    C_addMsg('system', 'ログインボタンを押してください。');
-    document.getElementById('loginBtn').style.display = 'block';
-  }
+    })
+    .catch(() => {
+      // 通信エラー → 手動入力
+      C_showEmailInputModal();
+    });
 }
 
-// 再ログインボタン押下（ロール切替時など）
+// 再ログインボタン押下
 function C_signIn() {
-  if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
-    C_showEmailInputModal();
-    return;
-  }
-  const origin = encodeURIComponent(location.origin);
-  const popup  = window.open(AUTH_APP_URL + '?origin=' + origin, 'authPopup', 'width=500,height=600,left=200,top=100');
-  if (!popup) C_showEmailInputModal();
+  C_startAutoAuth();
 }
 
 // サインイン成功時の処理
