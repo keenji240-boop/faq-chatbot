@@ -54,9 +54,13 @@ window.addEventListener('message', (e) => {
 // 親にメッセージを送る（ポップアップ・iframe両対応）
 function sendToParent(data) {
   if (window.opener && !window.opener.closed) {
-    window.opener.postMessage(data, PARENT_ORIGIN);
+    window.opener.postMessage(data, '*'); // GASのURLは動的なので * を使用
+    setStatus('送信: ' + JSON.stringify(data).slice(0,30));
+  } else if (window.parent !== window) {
+    window.parent.postMessage(data, '*');
+    setStatus('親へ送信: ' + JSON.stringify(data).slice(0,30));
   } else {
-    window.parent.postMessage(data, PARENT_ORIGIN);
+    setStatus('送信先なし');
   }
 }
 
