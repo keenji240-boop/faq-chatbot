@@ -380,26 +380,34 @@ function C_adjustLayout() {
 //  Google OAuth2認証（GSI tokenフロー・組織アカウント対応）
 // ============================================================
 
-// 自動認証（URLパラメータからメアドを読む）
+// 自動認証（sessionStorage + URLパラメータ）
 function C_startAutoAuth() {
-  // URLパラメータにメアドがあれば使う（AuthAppからのリダイレクト）
-  const params = new URLSearchParams(location.search);
+  // 1. URLパラメータにメアドがあれば保存して使う（AuthAppからのリダイレクト）
+  const params     = new URLSearchParams(location.search);
   const emailParam = params.get('email');
   if (emailParam) {
     userEmail = emailParam;
-    // URLからemailパラメータを消す（履歴に残らないように）
-    const cleanUrl = location.pathname;
-    history.replaceState({}, '', cleanUrl);
+    // sessionStorageに保存（タブを閉じるまで有効）
+    sessionStorage.setItem('userEmail', emailParam);
+    // URLをきれいにする
+    history.replaceState({}, '', location.pathname);
     C_onSignedIn();
     return;
   }
 
-  // URLパラメータがない場合はAuthAppにリダイレクト
+  // 2. sessionStorageにメアドがあれば使う（リダイレクト不要）
+  const savedEmail = sessionStorage.getItem('userEmail');
+  if (savedEmail) {
+    userEmail = savedEmail;
+    C_onSignedIn();
+    return;
+  }
+
+  // 3. どちらもなければAuthAppにリダイレクト（初回のみ）
   if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
     C_onGsiTimeout();
     return;
   }
-  // AuthAppにリダイレクト（同じタブで遷移・別画面なし）
   location.href = AUTH_APP_URL;
 }
 
@@ -480,7 +488,7 @@ function C_renderTopbar(info) {
 }
 
 function C_logout() {
-  // tokenフローはサーバーセッションなし → リロードで一般ロールに戻る
+  sessionStorage.removeItem('userEmail');
   userEmail = '';
   userRole  = 'general';
   C_renderTopbar({ role:'general', maskedEmail:'', displayRole:'一般' });
