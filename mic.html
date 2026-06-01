@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>マイクコンポーネント</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:sans-serif;background:#0a0a16;color:#c8d0f0;
+  display:flex;align-items:center;justify-content:center;
+  height:100vh;gap:10px;padding:10px;
+}
+button{
+  padding:8px 16px;border-radius:8px;border:none;
+  font-size:12px;font-weight:600;cursor:pointer;
+  background:#1e2240;color:#c8d0f0;
+  transition:all .2s;
+}
+button:hover{opacity:.8}
+button.active{background:#e84040;color:#fff;animation:pulse .8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+#status{font-size:11px;color:#7b80a0;min-width:80px;text-align:center}
+</style>
+</head>
+<body>
+<button id="micBtn" onclick="toggleMic()">🎙 マイク</button>
+<span id="status">待機中</span>
+
+<script>
+// 親ウィンドウのオリジン（GAS Web App）
+// GASのURLを設定（デプロイ後に変更）
+const PARENT_ORIGIN = '*'; // テスト用は * 、本番はGASのURLに変更
+
+let recognition = null;
+let isMicOn     = false;
+let isSpeaking  = false;
+
+// 親からのメッセージを受け取る
+window.addEventListener('message', (e) => {
+  const data = e.data;
+  if (!data || !data.type) return;
+
+  if (data.type === 'TTS_SPEAK') {
+    speak(data.text);
+  }
+  if (data.type === 'TTS_STOP') {
+    speechSynthesis.cancel();
+    isSpeaking = false;
+    setStatus('待機中');
+  }
+});
+
+// 親にメッセージを送る
+function sendToParent(data) {
+  window.parent.postMessage(data, PARENT_ORIGIN);
+}
+
+// ステータス表示
+function setStatus(text) {
+  document.getElementById('status').textContent = text;
+}
+
+// マイクON/OFF
+function toggleMic() {
+  const btn = document.getElementById('micBtn');
+  if (isMicOn) {
+    stopMic();
+    return;
+  }
+  startMic();
+}
+
+function startMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    setStatus('非対応');
+    sendToParent({ type:'MIC_ERROR', error:'SpeechRecognition非対応' });
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(() => {
+      recognition = new SR();
+      recognition.lang = 'ja-JP';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isMicOn = true;
+        setStatus('認識中…');
+        document.getElementById('micBtn').classList.add('active');
+        sendToParent({ type:'MIC_READY' });
+      };
+      recognition.onresult = (e) => {
+        const text = e.results[0][0].transcript.trim();
+        setStatus('送信中…');
+        sendToParent({ type:'VOICE_TEXT', text });
+      };
+      recognition.onend = () => {
+        isMicOn = false;
+        document.getElementById('micBtn').classList.remove('active');
+        if (!isSpeaking) setStatus('待機中');
+        // 自動再起動
+        if (!isSpeaking) setTimeout(startMic, 300);
+      };
+      recognition.onerror = (e) => {
+        if (e.error === 'aborted' || e.error === 'no-speech') return;
+        isMicOn = false;
+        document.getElementById('micBtn').classList.remove('active');
+        setStatus('エラー: ' + e.error);
+        sendToParent({ type:'MIC_ERROR', error: e.error });
+      };
+      recognition.start();
+    })
+    .catch(e => {
+      setStatus('許可なし');
+      sendToParent({ type:'MIC_ERROR', error:'マイク許可が拒否されました' });
+    });
+}
+
+function stopMic() {
+  if (recognition) try { recognition.stop(); } catch(e) {}
+  isMicOn = false;
+  document.getElementById('micBtn').classList.remove('active');
+  setStatus('待機中');
+}
+
+// TTS
+function speak(text) {
+  if (!text || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  isSpeaking = true;
+  setStatus('読み上げ中');
+  if (recognition) try { recognition.abort(); } catch(e) {}
+
+  setTimeout(() => {
+    const utt  = new SpeechSynthesisUtterance(text);
+    utt.lang   = 'ja-JP';
+    utt.rate   = 1.0;
+    const ja   = speechSynthesis.getVoices().find(v => v.lang === 'ja-JP');
+    if (ja) utt.voice = ja;
+    utt.onend  = () => {
+      isSpeaking = false;
+      setStatus('待機中');
+      setTimeout(startMic, 300);
+    };
+    utt.onerror = (e) => {
+      isSpeaking = false;
+      if (e.error !== 'interrupted') setStatus('TTSエラー');
+      else setStatus('待機中');
+    };
+    speechSynthesis.speak(utt);
+  }, 200);
+}
+
+if (window.speechSynthesis) {
+  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+}
+</script>
+</body>
+</html>
