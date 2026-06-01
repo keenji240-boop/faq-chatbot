@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>鳥取大学 FAQアシスタント</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- Google認証はAuthApp.gs（別デプロイ）で処理 -->
 <style>
 /* ── CSS変数 ── */
 :root{
@@ -274,7 +274,7 @@ textarea{resize:vertical;min-height:80px}
       <span class="mask-email" id="maskEmail"></span>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <button class="btn btn-primary btn-sm" id="loginBtn" style="display:none" onclick="C_signIn()">🔑 ログイン</button>
+      <button class="btn btn-primary btn-sm" id="loginBtn" style="display:none" onclick="C_signIn()">🔑 再ログイン</button>
       <button class="btn btn-ghost btn-sm" id="logoutBtn" style="display:none" onclick="C_logout()">ログアウト</button>
     </div>
   </div>
@@ -323,6 +323,9 @@ textarea{resize:vertical;min-height:80px}
   </div>
 </div>
 
+<!-- 認証用非表示iframe -->
+<iframe id="authFrame" src="" style="display:none" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+
 <!-- モーダル -->
 <div id="modalOverlay">
   <div id="modalCard">
@@ -336,8 +339,8 @@ textarea{resize:vertical;min-height:80px}
 // ============================================================
 //  定数・状態変数
 // ============================================================
-const GAS_URL    = 'https://script.google.com/macros/s/AKfycbwxHCEMnTELSIOmmiZLc2q37ugzy9j3cT6jxWXumvXAci2UVcaQWnmmCnzDZpjOeL_gNA/exec';
-const GSI_CLIENT_ID = 'YOUR_GSI_CLIENT_ID'; // Google Cloud コンソールのOAuth 2.0クライアントIDを入力
+const GAS_URL     = 'https://script.google.com/macros/s/AKfycbwxHCEMnTELSIOmmiZLc2q37ugzy9j3cT6jxWXumvXAci2UVcaQWnmmCnzDZpjOeL_gNA/exec';
+const AUTH_APP_URL = 'https://script.google.com/macros/s/AKfycbxFumk4npURIDB0FsBzQ7kLCuI7y_F5IBvyO9thLEmOFi835tlzL5xFc1n9vOE73Zqu0Q/exec';
 
 let userEmail      = '';
 let userRole       = 'general';
@@ -366,20 +369,21 @@ window.addEventListener('load', () => {
   C_adjustLayout();
   window.addEventListener('resize', C_adjustLayout);
 
-  // GSI client 初期化（polling で待機・最大5秒）
-  let _gsiPollCount = 0;
-  const _gsiTimer = setTimeout(C_onGsiTimeout, 5000);
-  const _gsiPoll = setInterval(() => {
-    _gsiPollCount++;
-    if (window.google && window.google.accounts && window.google.accounts.oauth2) {
-      clearInterval(_gsiPoll);
-      clearTimeout(_gsiTimer);
-      // 既存トークンチェック不要 → 一般ロールで起動しログインボタンを表示
-      C_onGsiTimeout();
-    } else if (_gsiPollCount > 50) {
-      clearInterval(_gsiPoll);
+  // postMessageでAuthAppからメアドを受け取るリスナー
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'AUTH_RESULT') {
+      if (e.data.allowed && e.data.email) {
+        userEmail = e.data.email;
+        C_onSignedIn();
+      } else {
+        // 取得失敗 → メアド手動入力モーダルを表示
+        C_showEmailInputModal();
+      }
     }
-  }, 100);
+  });
+
+  // AuthAppを非表示iframeで自動起動
+  C_startAutoAuth();
 });
 
 function C_adjustLayout() {
@@ -392,39 +396,40 @@ function C_adjustLayout() {
 //  Google OAuth2認証（GSI tokenフロー・組織アカウント対応）
 // ============================================================
 
-let _tokenClient = null;
-
-// サインインボタン押下
-function C_signIn() {
-  if (!window.google || !google.accounts || !google.accounts.oauth2) {
-    C_addMsg('error', 'Google認証ライブラリが読み込まれていません。ページを再読み込みしてください。');
+// 自動認証（非表示iframeで起動）
+function C_startAutoAuth() {
+  if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
+    // AUTH_APP_URL未設定 → 一般ロールで起動
+    C_onGsiTimeout();
     return;
   }
-  if (!_tokenClient) {
-    _tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GSI_CLIENT_ID,
-      scope: 'email profile',
-      callback: (tokenResponse) => {
-        if (tokenResponse.error) {
-          C_addMsg('error', 'ログインエラー: ' + tokenResponse.error);
-          return;
-        }
-        // アクセストークンでメアドを取得
-        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
-        })
-        .then(r => r.json())
-        .then(info => {
-          userEmail = info.email || '';
-          C_onSignedIn();
-        })
-        .catch(e => {
-          C_addMsg('error', 'ユーザー情報の取得に失敗しました: ' + e.message);
-        });
-      }
-    });
+  // 5秒タイムアウト
+  const authTimer = setTimeout(() => {
+    C_showEmailInputModal();
+  }, 5000);
+  // postMessageを一度だけ受け取ったらタイマーをクリア
+  const handler = (e) => {
+    if (e.data && e.data.type === 'AUTH_RESULT') {
+      clearTimeout(authTimer);
+      window.removeEventListener('message', handler);
+    }
+  };
+  window.addEventListener('message', handler);
+  // iframeにAuthApp URLをセット
+  const origin = encodeURIComponent(location.origin);
+  const frame  = document.getElementById('authFrame');
+  frame.src    = AUTH_APP_URL + '?origin=' + origin;
+}
+
+// 再ログインボタン押下（ロール切替時など）
+function C_signIn() {
+  if (!AUTH_APP_URL || AUTH_APP_URL === 'YOUR_AUTH_APP_URL') {
+    C_showEmailInputModal();
+    return;
   }
-  _tokenClient.requestAccessToken({ prompt: 'select_account' });
+  const origin = encodeURIComponent(location.origin);
+  const popup  = window.open(AUTH_APP_URL + '?origin=' + origin, 'authPopup', 'width=500,height=600,left=200,top=100');
+  if (!popup) C_showEmailInputModal();
 }
 
 // サインイン成功時の処理
@@ -445,6 +450,44 @@ function C_onGsiTimeout() {
   userRole  = 'general';
   C_renderTopbar({ role:'general', maskedEmail:'', displayRole:'一般' });
   C_startApp();
+}
+
+// メールアドレス手動入力モーダル
+function C_showEmailInputModal(message) {
+  C_showModal(
+    'ログイン',
+    `<p style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6">自動ログインできませんでした。<br>鳥取大学のメールアドレスを入力してください。</p>
+     <label class="modal-label">メールアドレス <span style="color:var(--red)">*</span></label>
+     <input type="email" id="emailInput" placeholder="xxx@tottori-u.ac.jp" autocomplete="email">
+     <div class="form-error" id="emailErr"></div>`,
+    [
+      { label:'ログイン', cls:'btn-primary', fn: () => {
+        const email = document.getElementById('emailInput').value.trim().toLowerCase();
+        if (!email) {
+          document.getElementById('emailErr').textContent = 'メールアドレスを入力してください。';
+          return;
+        }
+        if (!email.includes('@')) {
+          document.getElementById('emailErr').textContent = '正しいメールアドレスを入力してください。';
+          return;
+        }
+        userEmail = email;
+        C_closeModal();
+        C_onSignedIn();
+      }},
+      { label:'キャンセル', cls:'btn-ghost', fn: C_closeModal }
+    ]
+  );
+  // Enterキーで送信
+  setTimeout(() => {
+    const input = document.getElementById('emailInput');
+    if (input) {
+      input.focus();
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') document.querySelector('#modalBtns .btn-primary').click();
+      });
+    }
+  }, 100);
 }
 
 // ============================================================
@@ -629,7 +672,7 @@ async function C_requestMic(btn) {
   try {
     await navigator.mediaDevices.getUserMedia({ audio: true });
     micPermGranted = true;
-    C_addMsg('system', '音声機能が有効です。「' + (SETTINGS.WAKE_WORD||'ねえ、フクロウ') + '」と話しかけてください。');
+    C_addMsg('system', '音声機能が有効です。話しかけるとすぐに認識します。');
     C_startWakeListener();
   } catch(e) {
     C_addMsg('error', 'マイクにアクセスできませんでした。ブラウザの設定を確認してください。');
@@ -650,7 +693,7 @@ function C_setVoiceStatus(state) {
   el.className = 'voice-status vs-' + state;
   const labels = {
     off:'音声オフ',
-    wake:'待機中（' + (SETTINGS.WAKE_WORD||'ねえ、フクロウ') + '）',
+    wake:'リスニング中',
     listen:'認識中…',
     speak:'読み上げ中'
   };
@@ -660,61 +703,48 @@ function C_setVoiceStatus(state) {
 // ============================================================
 //  ウェイクワードリスナー
 // ============================================================
-const WAKE_VARIANTS = ['ねえフクロウ','ねえ、フクロウ','ねぇフクロウ','ねぇ、フクロウ','hey fukurou'];
-
+// 常時リスニング（ウェイクワードなし）
 function C_startWakeListener() {
   if (!micPermGranted || isMicOn || isSpeaking) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return;
-  wakeRecog = new SR();
-  wakeRecog.lang = 'ja-JP'; wakeRecog.continuous = true; wakeRecog.interimResults = false;
-  wakeRecog.onstart = () => C_setVoiceStatus('wake');
-  wakeRecog.onresult = (e) => {
-    const t = e.results[e.results.length-1][0].transcript.trim().replace(/\s/g,'');
-    if (WAKE_VARIANTS.some(w => t.includes(w.replace(/\s/g,'')))) {
-      wakeRecog.stop();
-      C_speak('はい、どうぞ。');
-      setTimeout(C_startCommandListener, 1200);
-    }
-  };
-  wakeRecog.onend = () => { if (micPermGranted && !isMicOn && !isSpeaking) setTimeout(C_startWakeListener, 500); };
-  wakeRecog.onerror = (e) => {
-    // 'aborted' は stop() による正常終了なので無視
-    if (e.error === 'aborted' || e.error === 'no-speech') return;
-    C_setVoiceStatus('off');
-    C_addMsg('error', '音声認識エラー: ' + e.error);
-  };
-  try { wakeRecog.start(); } catch(e) {}
-}
-
-function C_startCommandListener() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return;
   recognition = new SR();
-  recognition.lang = 'ja-JP'; recognition.continuous = false; recognition.maxAlternatives = 3;
+  recognition.lang = 'ja-JP';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 3;
   recognition.onstart = () => C_setVoiceStatus('listen');
   recognition.onresult = (e) => {
     const candidates = Array.from(e.results[0]).map(r => r.transcript.trim());
     let handled = false;
     for (const t of candidates) { if (C_detectCommand(t)) { handled = true; break; } }
     if (!handled) {
-      const el = window.innerWidth > 1320 ? document.getElementById('inputTextPC') : document.getElementById('inputText');
+      const el = window.innerWidth > 1320
+        ? document.getElementById('inputTextPC')
+        : document.getElementById('inputText');
       el.value = candidates[0];
       C_sendMessage();
     }
   };
-  recognition.onend = () => { if (micPermGranted && !isMicOn) C_startWakeListener(); };
+  recognition.onend = () => {
+    if (micPermGranted && !isMicOn && !isSpeaking) {
+      setTimeout(C_startWakeListener, 300);
+    }
+  };
   recognition.onerror = (e) => {
     if (e.error === 'aborted' || e.error === 'no-speech') {
-      if (micPermGranted && !isMicOn) setTimeout(C_startWakeListener, 500);
+      if (micPermGranted && !isMicOn && !isSpeaking) setTimeout(C_startWakeListener, 300);
       return;
     }
     C_setVoiceStatus('off');
     C_addMsg('error', '音声認識エラー: ' + e.error);
-    if (micPermGranted) setTimeout(C_startWakeListener, 500);
+    if (micPermGranted) setTimeout(C_startWakeListener, 1000);
   };
   try { recognition.start(); } catch(e) {}
 }
+
+// 常時リスニングではウェイクワードリスナー不要
+function C_startCommandListener() { C_startWakeListener(); }
 
 function C_toggleMic() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
