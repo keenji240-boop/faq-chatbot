@@ -3,111 +3,73 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>備品予約システム - 認証サンプル</title>
-
-  <!-- Google Sign-In (GSI) ライブラリ -->
+  <title>備品予約システム - 認証テスト</title>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-
   <style>
-    /* ===== リセット・基本 ===== */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Segoe UI', Meiryo, sans-serif;
+      font-family: Meiryo, sans-serif;
       background: #f0f2f5;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-
-    /* ===== カード ===== */
     .card {
       background: #fff;
       border-radius: 12px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-      padding: 40px 36px;
+      padding: 36px 32px;
       width: 100%;
-      max-width: 460px;
+      max-width: 420px;
     }
-
-    .card-title {
-      font-size: 1.3rem;
-      font-weight: bold;
+    h2 {
       color: #1f3864;
-      margin-bottom: 6px;
-    }
-    .card-sub {
-      font-size: 0.85rem;
-      color: #888;
-      margin-bottom: 28px;
+      font-size: 1.2rem;
+      margin-bottom: 24px;
+      text-align: center;
     }
 
     /* ===== セクション ===== */
     .section {
       border: 1px solid #e0e0e0;
       border-radius: 8px;
-      padding: 16px 18px;
+      padding: 16px;
       margin-bottom: 16px;
     }
     .section-title {
-      font-size: 0.8rem;
-      font-weight: bold;
-      color: #2e5fa3;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 12px;
-    }
-
-    /* ===== ステータスバッジ ===== */
-    .badge {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 99px;
       font-size: 0.78rem;
       font-weight: bold;
+      color: #2e5fa3;
+      margin-bottom: 12px;
+      text-transform: uppercase;
     }
-    .badge-ok  { background: #e2efda; color: #375623; }
-    .badge-ng  { background: #fce4e4; color: #b22222; }
-    .badge-wait{ background: #fff2cc; color: #bf9000; }
 
     /* ===== ユーザー情報 ===== */
-    .user-info {
-      display: none;
+    .user-row {
+      display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
+      margin-bottom: 12px;
     }
-    .user-info.show { display: flex; }
-    .user-avatar {
+    .avatar {
       width: 48px; height: 48px;
       border-radius: 50%;
       object-fit: cover;
       border: 2px solid #2e5fa3;
+      display: none;
     }
-    .user-avatar-placeholder {
+    .avatar-icon {
       width: 48px; height: 48px;
       border-radius: 50%;
       background: #d9e2f3;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.4rem; color: #2e5fa3;
-    }
-    .user-name  { font-weight: bold; font-size: 0.95rem; color: #222; }
-    .user-email { font-size: 0.82rem; color: #555; margin-top: 2px; }
-    .user-role  { font-size: 0.78rem; margin-top: 4px; }
-
-    /* ===== マイクステータス ===== */
-    .mic-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
+      justify-content: center;
+      font-size: 1.4rem;
     }
-    .mic-label { font-size: 0.88rem; color: #444; }
-    .mic-detail {
-      font-size: 0.78rem;
-      color: #888;
-      margin-top: 4px;
-      min-height: 18px;
-    }
+    .user-name  { font-weight: bold; font-size: 0.95rem; }
+    .user-email { font-size: 0.85rem; color: #555; margin-top: 2px; }
 
     /* ===== ボタン ===== */
     .btn {
@@ -120,72 +82,56 @@
       font-size: 0.88rem;
       font-weight: bold;
       cursor: pointer;
-      transition: background 0.15s;
     }
-    .btn-primary { background: #2e5fa3; color: #fff; }
-    .btn-primary:hover { background: #1f3864; }
-    .btn-danger  { background: #b22222; color: #fff; }
-    .btn-danger:hover  { background: #8b1a1a; }
-    .btn-outline {
-      background: #fff;
-      color: #2e5fa3;
-      border: 1.5px solid #2e5fa3;
-    }
-    .btn-outline:hover { background: #d9e2f3; }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-blue  { background: #2e5fa3; color: #fff; }
+    .btn-blue:hover  { background: #1f3864; }
+    .btn-red   { background: #b22222; color: #fff; }
+    .btn-red:hover   { background: #8b1a1a; }
+    .btn-gray  { background: #eee; color: #333; }
+    .btn-gray:hover  { background: #ddd; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ===== GASステータス ===== */
-    .gas-result {
-      font-size: 0.82rem;
+    /* ===== マイク ===== */
+    .mic-status {
+      font-size: 0.88rem;
       color: #444;
+      margin-bottom: 10px;
       min-height: 20px;
-      margin-top: 8px;
-      word-break: break-all;
+    }
+    .mic-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+    .meter-wrap {
+      margin-top: 12px;
+      display: none;
+    }
+    .meter-label { font-size: 0.75rem; color: #888; margin-bottom: 4px; }
+    .meter-bg {
+      background: #f0f2f5;
+      border-radius: 4px;
+      height: 12px;
+      overflow: hidden;
+    }
+    .meter-bar {
+      height: 100%;
+      width: 0%;
+      background: #2e5fa3;
+      transition: width 0.08s;
     }
 
-    /* ===== ログイン前/後の表示切り替え ===== */
-    .before-login { display: block; }
-    .after-login  { display: none;  }
-    .logged-in .before-login { display: none; }
-    .logged-in .after-login  { display: block; }
-
-    /* ===== 区切り ===== */
-    .divider {
-      border: none;
-      border-top: 1px solid #efefef;
-      margin: 12px 0;
-    }
-
-    /* ===== レスポンシブ ===== */
-    @media (max-width: 500px) {
-      .card { padding: 28px 16px; }
-    }
+    /* ===== ログイン前後の切り替え ===== */
+    #afterLogin  { display: none; }
+    #beforeLogin { display: block; }
   </style>
 </head>
 <body>
+<div class="card">
+  <h2>🔐 備品予約システム 認証テスト</h2>
 
-<div class="card" id="appCard">
-
-  <div class="card-title">🔐 備品予約システム</div>
-  <div class="card-sub">認証・マイク権限 サンプル</div>
-
-  <!-- ===== [1] Google認証セクション ===== -->
+  <!-- ===== Google認証 ===== -->
   <div class="section">
-    <div class="section-title">① Google アカウント認証</div>
+    <div class="section-title">① Googleアカウント</div>
 
     <!-- ログイン前 -->
-    <div class="before-login">
-      <p style="font-size:0.85rem;color:#555;margin-bottom:14px;">
-        Googleアカウントでサインインしてください。
-      </p>
-
-      <!--
-        GSI ワンタップ / ボタン
-        data-client_id に取得した GSI_CLIENT_ID を設定する
-        data-hosted_domain で特定ドメインに限定する場合は
-          例: data-hosted_domain="example.ac.jp"
-        を追加する（今回は全アカウント可のため省略）
-      -->
+    <div id="beforeLogin">
       <div id="g_id_onload"
         data-client_id="826029939967-t2d00f9l7p537gtdi6mqt8hl8kn1gml6.apps.googleusercontent.com"
         data-callback="onGsiCallback"
@@ -202,267 +148,146 @@
     </div>
 
     <!-- ログイン後 -->
-    <div class="after-login">
-      <div class="user-info show" id="userInfo">
-        <div class="user-avatar-placeholder" id="userAvatarPlaceholder">👤</div>
-        <img id="userAvatar" class="user-avatar" src="" alt="avatar"
-             style="display:none" onerror="this.style.display='none';
-             document.getElementById('userAvatarPlaceholder').style.display='flex'">
+    <div id="afterLogin">
+      <div class="user-row">
+        <div class="avatar-icon" id="avatarIcon">👤</div>
+        <img id="avatarImg" class="avatar" src="" alt="">
         <div>
           <div class="user-name"  id="userName">-</div>
           <div class="user-email" id="userEmail">-</div>
-          <div class="user-role"  id="userRole"></div>
         </div>
       </div>
-
-      <hr class="divider">
-
-      <button class="btn btn-outline" onclick="signOut()">
-        サインアウト
-      </button>
+      <button class="btn btn-gray" onclick="signOut()">サインアウト</button>
     </div>
   </div>
 
-  <!-- ===== [2] マイク権限セクション ===== -->
+  <!-- ===== マイク ===== -->
   <div class="section">
-    <div class="section-title">② マイク権限</div>
-
-    <div class="mic-row">
-      <span class="mic-label">マイクの状態</span>
-      <span class="badge badge-wait" id="micBadge">未確認</span>
+    <div class="section-title">② マイク</div>
+    <div class="mic-status" id="micStatus">
+      「マイクをテスト」を押してください。
     </div>
-    <div class="mic-detail" id="micDetail">
-      「マイクをテスト」ボタンを押して権限を確認してください。
-    </div>
-
-    <hr class="divider">
-
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;">
-      <button class="btn btn-primary" id="btnMicTest" onclick="requestMic()">
+    <div class="mic-buttons">
+      <button class="btn btn-blue" id="btnStart" onclick="startMic()">
         🎤 マイクをテスト
       </button>
-      <button class="btn btn-danger" id="btnMicStop"
+      <button class="btn btn-red" id="btnStop"
               onclick="stopMic()" style="display:none">
-        ⏹ テスト停止
+        ⏹ 停止
       </button>
     </div>
-
-    <!-- 音量メーター（許可後に表示） -->
-    <div id="meterWrap" style="display:none;margin-top:12px;">
-      <div style="font-size:0.78rem;color:#888;margin-bottom:4px;">入力レベル</div>
-      <div style="background:#f0f2f5;border-radius:4px;height:10px;overflow:hidden;">
-        <div id="meterBar"
-             style="height:100%;width:0%;background:#2e5fa3;transition:width 0.08s;">
-        </div>
+    <div class="meter-wrap" id="meterWrap">
+      <div class="meter-label">入力レベル</div>
+      <div class="meter-bg">
+        <div class="meter-bar" id="meterBar"></div>
       </div>
-    </div>
-  </div>
-
-  <!-- ===== [3] GAS連携セクション ===== -->
-  <div class="section">
-    <div class="section-title">③ GASサーバー連携（メール送信確認）</div>
-
-    <p style="font-size:0.82rem;color:#555;margin-bottom:12px;">
-      ログイン後にGASへIDトークンを送信し、サーバー側でメールアドレスを検証します。
-    </p>
-
-    <button class="btn btn-primary" id="btnGas"
-            onclick="sendToGas()" disabled>
-      GASへ送信してトークン検証
-    </button>
-
-    <div class="gas-result" id="gasResult">
-      （ログイン後に有効になります）
     </div>
   </div>
 
 </div><!-- /.card -->
 
-
 <script>
 // ================================================================
 // 設定
 // ================================================================
-// ▼ 取得したクライアントIDに書き換えてください
 var GSI_CLIENT_ID = '826029939967-t2d00f9l7p537gtdi6mqt8hl8kn1gml6.apps.googleusercontent.com';
 
-// ▼ デプロイしたGASのWebアプリURLに書き換えてください
-var GAS_URL = 'https://script.google.com/macros/s/AKfycbwnkB-wuTXWo9WVWP30Omg4GOLEK7RzToH_JRa7jklKPwyisx9lp7UmA3VyMxocohs/exec';
-
 // ================================================================
-// 状態管理
-// ================================================================
-var currentUser = null;   // { name, email, picture, idToken }
-var micStream   = null;   // MediaStream
-var micContext  = null;   // AudioContext
-var micAnimId   = null;   // requestAnimationFrame ID
-
-// ================================================================
-// [1] Google Sign-In コールバック
+// Google Sign-In コールバック
 // ================================================================
 function onGsiCallback(response) {
-  // response.credential = IDトークン（JWT）
-  var idToken = response.credential;
+  // GoogleのAPIでIDトークンを検証してメアドを取得
+  fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + response.credential)
+    .then(function(res) { return res.json(); })
+    .then(function(p) {
+      // ユーザー情報を表示
+      document.getElementById('userName').textContent  = p.name    || '（名前なし）';
+      document.getElementById('userEmail').textContent = p.email   || '（メアドなし）';
 
-  // JWTのペイロードをデコード（Base64）
-  var payload = JSON.parse(atob(idToken.split('.')[1]));
+      // アバター画像
+      if (p.picture) {
+        var img = document.getElementById('avatarImg');
+        img.src = p.picture;
+        img.style.display = 'block';
+        document.getElementById('avatarIcon').style.display = 'none';
+      }
 
-  currentUser = {
-    name    : payload.name    || '',
-    email   : payload.email   || '',
-    picture : payload.picture || '',
-    idToken : idToken,
-    sub     : payload.sub     || '',
-  };
+      // ログイン前後の表示切り替え
+      document.getElementById('beforeLogin').style.display = 'none';
+      document.getElementById('afterLogin').style.display  = 'block';
 
-  // UI更新
-  updateUserUI(currentUser);
-
-  // GASボタンを有効化
-  document.getElementById('btnGas').disabled = false;
-
-  console.log('ログイン成功:', currentUser.email);
+      console.log('ログイン成功:', p.email);
+    })
+    .catch(function(err) {
+      alert('ログインエラー: ' + err.message);
+    });
 }
 
-// ----------------------------------------------------------------
-// ユーザーUI更新
-// ----------------------------------------------------------------
-function updateUserUI(user) {
-  document.getElementById('appCard').classList.add('logged-in');
-
-  document.getElementById('userName').textContent  = user.name;
-  document.getElementById('userEmail').textContent = user.email;
-
-  // アバター画像
-  if (user.picture) {
-    var img = document.getElementById('userAvatar');
-    img.src = user.picture;
-    img.style.display = 'block';
-    document.getElementById('userAvatarPlaceholder').style.display = 'none';
-  }
-
-  // ロール判定（メールアドレスで判定）
-  var role = getRole(user.email);
-  var roleEl = document.getElementById('userRole');
-  if (role === 'admin') {
-    roleEl.innerHTML = '<span class="badge badge-ok">管理者</span>';
-  } else if (role === 'user') {
-    roleEl.innerHTML = '<span class="badge" style="background:#d9e2f3;color:#1f3864;">一般利用者</span>';
-  } else {
-    roleEl.innerHTML = '<span class="badge badge-ng">権限なし</span>';
-  }
-}
-
-// ----------------------------------------------------------------
-// ロール判定（メールアドレスベース）
-// ※ 実際の運用では GAS側で判定することを推奨
-// ----------------------------------------------------------------
-function getRole(email) {
-  // 管理者メールアドレスリスト（実際はGAS/スプレッドシートで管理）
-  var adminList = [
-    'admin@example.ac.jp',
-  ];
-  if (adminList.indexOf(email) !== -1) return 'admin';
-
-  // 特定ドメインのみ一般利用者として許可する場合は以下を有効化
-  // if (email.endsWith('@example.ac.jp')) return 'user';
-
-  // 今回は全Googleアカウントを一般利用者として扱う
-  return 'user';
-}
-
-// ----------------------------------------------------------------
+// ================================================================
 // サインアウト
-// ----------------------------------------------------------------
+// ================================================================
 function signOut() {
   google.accounts.id.disableAutoSelect();
-  currentUser = null;
-
-  document.getElementById('appCard').classList.remove('logged-in');
+  document.getElementById('beforeLogin').style.display = 'block';
+  document.getElementById('afterLogin').style.display  = 'none';
   document.getElementById('userName').textContent  = '-';
   document.getElementById('userEmail').textContent = '-';
-  document.getElementById('userRole').innerHTML    = '';
-  document.getElementById('btnGas').disabled = true;
-  document.getElementById('gasResult').textContent =
-    '（ログイン後に有効になります）';
-
+  document.getElementById('avatarImg').style.display  = 'none';
+  document.getElementById('avatarIcon').style.display = 'flex';
   stopMic();
 }
 
 // ================================================================
-// [2] マイク権限
+// マイク
 // ================================================================
+var micStream  = null;
+var micContext = null;
+var micAnimId  = null;
 
-// ----------------------------------------------------------------
-// マイクアクセスをリクエスト
-// ----------------------------------------------------------------
-async function requestMic() {
-  var badge  = document.getElementById('micBadge');
-  var detail = document.getElementById('micDetail');
+function startMic() {
+  document.getElementById('micStatus').textContent = '許可を確認中...';
 
-  badge.className  = 'badge badge-wait';
-  badge.textContent = '確認中...';
-  detail.textContent = 'ブラウザのポップアップを確認してください。';
-
-  try {
-    // マイクアクセスをリクエスト
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-
-    // 許可された
-    badge.className   = 'badge badge-ok';
-    badge.textContent = '使用可能 ✓';
-    detail.textContent = 'マイクへのアクセスが許可されました。入力レベルを確認しています。';
-
-    document.getElementById('btnMicTest').style.display = 'none';
-    document.getElementById('btnMicStop').style.display = 'inline-flex';
-    document.getElementById('meterWrap').style.display  = 'block';
-
-    // 音量メーターを開始
-    startMeter(micStream);
-
-  } catch (err) {
-    // 拒否またはエラー
-    badge.className   = 'badge badge-ng';
-    badge.textContent = '使用不可 ✗';
-
-    if (err.name === 'NotAllowedError') {
-      detail.textContent = '❌ マイクへのアクセスが拒否されました。' +
-        'ブラウザの設定からマイクの権限を許可してください。';
-    } else if (err.name === 'NotFoundError') {
-      detail.textContent = '❌ マイクが見つかりません。' +
-        'マイクが接続されているか確認してください。';
-    } else {
-      detail.textContent = '❌ エラー: ' + err.message;
-    }
-    console.error('マイクエラー:', err);
-  }
+  navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    .then(function(stream) {
+      micStream = stream;
+      document.getElementById('micStatus').textContent = '✅ マイク使用可能';
+      document.getElementById('btnStart').style.display = 'none';
+      document.getElementById('btnStop').style.display  = 'inline-flex';
+      document.getElementById('meterWrap').style.display = 'block';
+      startMeter(stream);
+    })
+    .catch(function(err) {
+      if (err.name === 'NotAllowedError') {
+        document.getElementById('micStatus').textContent =
+          '❌ マイクが拒否されました。ブラウザの設定から許可してください。';
+      } else if (err.name === 'NotFoundError') {
+        document.getElementById('micStatus').textContent =
+          '❌ マイクが見つかりません。接続を確認してください。';
+      } else {
+        document.getElementById('micStatus').textContent =
+          '❌ エラー: ' + err.message;
+      }
+    });
 }
 
-// ----------------------------------------------------------------
-// 音量メーター
-// ----------------------------------------------------------------
 function startMeter(stream) {
   micContext = new (window.AudioContext || window.webkitAudioContext)();
   var source   = micContext.createMediaStreamSource(stream);
   var analyser = micContext.createAnalyser();
   analyser.fftSize = 256;
   source.connect(analyser);
-
-  var dataArray = new Uint8Array(analyser.frequencyBinCount);
+  var data = new Uint8Array(analyser.frequencyBinCount);
 
   function draw() {
     micAnimId = requestAnimationFrame(draw);
-    analyser.getByteFrequencyData(dataArray);
-    var avg = dataArray.reduce(function(a, b){ return a + b; }, 0) / dataArray.length;
-    var pct = Math.min(100, (avg / 128) * 100);
-    document.getElementById('meterBar').style.width = pct + '%';
+    analyser.getByteFrequencyData(data);
+    var avg = data.reduce(function(a,b){ return a+b; }, 0) / data.length;
+    document.getElementById('meterBar').style.width =
+      Math.min(100, (avg / 128) * 100) + '%';
   }
   draw();
 }
 
-// ----------------------------------------------------------------
-// マイクテスト停止
-// ----------------------------------------------------------------
 function stopMic() {
   if (micAnimId) { cancelAnimationFrame(micAnimId); micAnimId = null; }
   if (micContext) { micContext.close(); micContext = null; }
@@ -470,93 +295,24 @@ function stopMic() {
     micStream.getTracks().forEach(function(t){ t.stop(); });
     micStream = null;
   }
-
-  document.getElementById('btnMicTest').style.display  = 'inline-flex';
-  document.getElementById('btnMicStop').style.display  = 'none';
-  document.getElementById('meterWrap').style.display   = 'none';
-  document.getElementById('meterBar').style.width      = '0%';
-}
-
-// ================================================================
-// [3] GASサーバー連携
-// ================================================================
-async function sendToGas() {
-  if (!currentUser) {
-    document.getElementById('gasResult').textContent = '先にログインしてください。';
-    return;
-  }
-
-  var resultEl = document.getElementById('gasResult');
-  resultEl.textContent = '送信中...';
-  document.getElementById('btnGas').disabled = true;
-
-  try {
-    // IDトークンをGASへPOST送信
-    var formData = new FormData();
-    formData.append('action',  'verifyToken');
-    formData.append('idToken', currentUser.idToken);
-
-    var res  = await fetch(GAS_URL, {
-      method   : 'POST',
-      body     : formData,
-      redirect : 'follow',
-    });
-    var json = await res.json();
-
-    if (json.status === 'success') {
-      resultEl.innerHTML =
-        '<span style="color:#375623">✅ 検証成功</span><br>' +
-        'メール: <b>' + json.email + '</b><br>' +
-        'ロール: <b>' + json.role  + '</b>';
-    } else {
-      resultEl.innerHTML =
-        '<span style="color:#b22222">❌ 検証失敗</span><br>' +
-        json.message;
-    }
-  } catch (err) {
-    resultEl.innerHTML =
-      '<span style="color:#b22222">❌ 通信エラー</span><br>' + err.message;
-    console.error('GAS通信エラー:', err);
-  } finally {
-    document.getElementById('btnGas').disabled = false;
-  }
+  document.getElementById('btnStart').style.display  = 'inline-flex';
+  document.getElementById('btnStop').style.display   = 'none';
+  document.getElementById('meterWrap').style.display = 'none';
+  document.getElementById('meterBar').style.width    = '0%';
+  document.getElementById('micStatus').textContent   =
+    '「マイクをテスト」を押してください。';
 }
 
 // ================================================================
 // 初期化：マイク対応チェック
 // ================================================================
-(function checkMicSupport() {
-  var badge  = document.getElementById('micBadge');
-  var detail = document.getElementById('micDetail');
-  var btn    = document.getElementById('btnMicTest');
-
+(function() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    badge.className   = 'badge badge-ng';
-    badge.textContent = '非対応';
-    detail.textContent = 'このブラウザはマイクAPIに対応していません。' +
-      'Chrome/Firefox/Safariの最新版をお使いください。';
-    btn.disabled = true;
-  } else {
-    // 既に権限状態を確認（promptは出さない）
-    if (navigator.permissions) {
-      navigator.permissions.query({ name: 'microphone' }).then(function(result) {
-        if (result.state === 'granted') {
-          badge.className   = 'badge badge-ok';
-          badge.textContent = '許可済み ✓';
-          detail.textContent = '既にマイクへのアクセスが許可されています。';
-        } else if (result.state === 'denied') {
-          badge.className   = 'badge badge-ng';
-          badge.textContent = '拒否済み ✗';
-          detail.textContent = 'マイクへのアクセスが拒否されています。' +
-            'ブラウザの設定から権限を変更してください。';
-          btn.disabled = true;
-        }
-        // 'prompt' の場合はそのまま（ボタン押下で確認）
-      });
-    }
+    document.getElementById('micStatus').textContent =
+      '❌ このブラウザはマイクに対応していません。';
+    document.getElementById('btnStart').disabled = true;
   }
 })();
 </script>
-
 </body>
 </html>
