@@ -159,41 +159,66 @@ function C_stopMic() {
   setStatus('タップしてマイクを起動');
 }
 
-// ── TTS ──
+// ── TTS（Web Speech APIトレーニング準拠・高品質版）──
 function C_speak(text) {
   if (!text || !window.speechSynthesis) return;
-  speechSynthesis.cancel();
+
+  // 再生中なら強制停止（重ね付け防止）
+  if (window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+  }
+
   isSpeaking = true;
   if (recognition) try { recognition.abort(); } catch(e) {}
   document.getElementById('micBtn').className = 'speaking';
   setStatus('読み上げ中…');
   C_sendToParent({ type:'MIC_SPEAKING' });
 
-  setTimeout(() => {
-    const utt  = new SpeechSynthesisUtterance(text);
-    utt.lang   = 'ja-JP';
-    utt.rate   = 1.0;
-    const voices = speechSynthesis.getVoices();
-    const ja   = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja'));
-    if (ja) utt.voice = ja;
+  // 句読点で分割して順番に再生（長文途中停止バグ対策）
+  const segments = C_splitTextToSegments(text);
+  C_speakSequentially(segments);
+}
 
-    utt.onend = () => {
-      isSpeaking = false;
-      document.getElementById('micBtn').className = autoRestart ? 'listening' : '';
-      setStatus(autoRestart ? '認識中…' : 'タップしてマイクを起動');
-      setTranscript('');
-      C_sendToParent({ type:'MIC_DONE' });
-      if (autoRestart) setTimeout(C_startMic, 300);
-    };
-    utt.onerror = (e) => {
-      isSpeaking = false;
-      document.getElementById('micBtn').className = '';
-      if (e.error !== 'interrupted') setStatus('読み上げエラー: ' + e.error);
-      C_sendToParent({ type:'MIC_DONE' });
-      if (autoRestart) setTimeout(C_startMic, 300);
-    };
-    speechSynthesis.speak(utt);
-  }, 150);
+// テキストを句読点で分割
+function C_splitTextToSegments(text) {
+  // 句点・読点・感嘆符・疑問符で分割（空白は除去）
+  const parts = text.split(/(?<=[。、！？!?])/);
+  return parts.map(s => s.trim()).filter(s => s.length > 0);
+}
+
+// 分割されたセグメントを順番に再生（非同期制御）
+async function C_speakSequentially(segments) {
+  for (let i = 0; i < segments.length; i++) {
+    if (!isSpeaking) break; // 途中停止された場合
+    await new Promise((resolve) => {
+      const utt   = new SpeechSynthesisUtterance(segments[i]);
+      utt.lang    = 'ja-JP';
+      utt.rate    = 1.0;
+      utt.pitch   = 1.0;
+
+      // Google音声 > Kyoko > その他ja-JP の優先順で選択
+      const voices    = window.speechSynthesis.getVoices();
+      const bestVoice = voices.find(v => v.lang === 'ja-JP' && v.name.includes('Google')) ||
+                        voices.find(v => v.lang === 'ja-JP' && v.name.includes('Kyoko')) ||
+                        voices.find(v => v.lang === 'ja-JP');
+      if (bestVoice) utt.voice = bestVoice;
+
+      utt.onend  = resolve;
+      utt.onerror = (e) => {
+        if (e.error !== 'interrupted') setStatus('読み上げエラー: ' + e.error);
+        resolve();
+      };
+      window.speechSynthesis.speak(utt);
+    });
+  }
+
+  // 全セグメント再生完了
+  isSpeaking = false;
+  document.getElementById('micBtn').className = autoRestart ? 'listening' : '';
+  setStatus(autoRestart ? '認識中…' : 'タップしてマイクを起動');
+  setTranscript('');
+  C_sendToParent({ type:'MIC_DONE' });
+  if (autoRestart) setTimeout(C_startMic, 300);
 }
 
 if (window.speechSynthesis) {
