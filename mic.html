@@ -3,163 +3,197 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>マイクコンポーネント</title>
+<title>音声入力</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{
-  font-family:sans-serif;background:#0a0a16;color:#c8d0f0;
-  display:flex;align-items:center;justify-content:center;
-  height:100vh;gap:10px;padding:10px;
+  font-family:'Noto Sans JP',sans-serif;
+  background:#06060f;color:#c8d0f0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  height:100vh;gap:10px;padding:12px;
 }
-button{
-  padding:8px 16px;border-radius:8px;border:none;
-  font-size:12px;font-weight:600;cursor:pointer;
-  background:#1e2240;color:#c8d0f0;
-  transition:all .2s;
+#micBtn{
+  width:64px;height:64px;border-radius:50%;border:none;
+  background:#1e2240;color:#c8d0f0;font-size:28px;
+  cursor:pointer;transition:all .2s;
+  box-shadow:0 0 0 0 rgba(232,64,64,0);
 }
-button:hover{opacity:.8}
-button.active{background:#e84040;color:#fff;animation:pulse .8s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-#status{font-size:11px;color:#7b80a0;min-width:80px;text-align:center}
+#micBtn.listening{
+  background:rgba(232,64,64,.2);color:#e84040;
+  animation:micPulse .8s ease-in-out infinite;
+}
+#micBtn.speaking{
+  background:rgba(64,128,232,.2);color:#4080e8;
+  animation:micPulse .6s ease-in-out infinite;
+}
+@keyframes micPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(232,64,64,.4)}
+  50%{box-shadow:0 0 0 12px rgba(232,64,64,0)}
+}
+#status{font-size:11px;color:#7b80a0;text-align:center;min-height:16px}
+#transcript{
+  font-size:12px;color:#c8d0f0;text-align:center;
+  max-width:280px;min-height:20px;word-break:break-all;
+}
 </style>
 </head>
 <body>
-<button id="micBtn" onclick="toggleMic()">🎙 マイク</button>
-<span id="status">待機中</span>
+<button id="micBtn" onclick="C_toggleMic()">🎙</button>
+<div id="status">タップしてマイクを起動</div>
+<div id="transcript"></div>
 
 <script>
-// 親ウィンドウのオリジン（GAS Web App）
-// GASのURLを設定（デプロイ後に変更）
-const PARENT_ORIGIN = '*'; // GASのURLは動的なため * を使用
+// GASのURLは動的なため * を使用
+const PARENT_ORIGIN = '*';
 
 let recognition = null;
 let isMicOn     = false;
 let isSpeaking  = false;
+let autoRestart = false;
 
-// 親からのメッセージを受け取る
+// ── 親からのメッセージ受信 ──
 window.addEventListener('message', (e) => {
   const data = e.data;
   if (!data || !data.type) return;
-
-  if (data.type === 'TTS_SPEAK') {
-    speak(data.text);
-  }
-  if (data.type === 'TTS_STOP') {
-    speechSynthesis.cancel();
-    isSpeaking = false;
-    setStatus('待機中');
-  }
+  if (data.type === 'TTS_SPEAK') { C_speak(data.text); }
+  if (data.type === 'TTS_STOP')  { speechSynthesis.cancel(); isSpeaking = false; setStatus('待機中'); if (autoRestart) setTimeout(C_startMic, 300); }
 });
 
-// 親にメッセージを送る（ポップアップ・iframe両対応）
-function sendToParent(data) {
+// ── 親へメッセージ送信 ──
+function C_sendToParent(data) {
   if (window.opener && !window.opener.closed) {
-    window.opener.postMessage(data, '*'); // GASのURLは動的なので * を使用
-    setStatus('送信: ' + JSON.stringify(data).slice(0,30));
+    window.opener.postMessage(data, PARENT_ORIGIN);
   } else if (window.parent !== window) {
-    window.parent.postMessage(data, '*');
-    setStatus('親へ送信: ' + JSON.stringify(data).slice(0,30));
-  } else {
-    setStatus('送信先なし');
+    window.parent.postMessage(data, PARENT_ORIGIN);
   }
 }
 
-// ステータス表示
-function setStatus(text) {
-  document.getElementById('status').textContent = text;
-}
+// ── ステータス・トランスクリプト表示 ──
+function setStatus(text)     { document.getElementById('status').textContent = text; }
+function setTranscript(text) { document.getElementById('transcript').textContent = text; }
 
-// マイクON/OFF
-function toggleMic() {
-  const btn = document.getElementById('micBtn');
+// ── マイクON/OFF切替 ──
+function C_toggleMic() {
+  if (isSpeaking) { speechSynthesis.cancel(); isSpeaking = false; }
   if (isMicOn) {
-    stopMic();
-    return;
+    autoRestart = false;
+    C_stopMic();
+  } else {
+    autoRestart = true;
+    C_startMic();
   }
-  startMic();
 }
 
-function startMic() {
+// ── マイク起動 ──
+function C_startMic() {
+  if (isMicOn || isSpeaking) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    setStatus('非対応');
-    sendToParent({ type:'MIC_ERROR', error:'SpeechRecognition非対応' });
-    return;
-  }
+  if (!SR) { setStatus('音声認識非対応のブラウザです'); C_sendToParent({ type:'MIC_ERROR', error:'SpeechRecognition非対応' }); return; }
+
   navigator.mediaDevices.getUserMedia({ audio: true })
     .then(() => {
       recognition = new SR();
-      recognition.lang = 'ja-JP';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+      recognition.lang            = 'ja-JP';
+      recognition.continuous      = false;
+      recognition.interimResults  = true;
+      recognition.maxAlternatives = 3;
 
       recognition.onstart = () => {
         isMicOn = true;
+        document.getElementById('micBtn').className = 'listening';
         setStatus('認識中…');
-        document.getElementById('micBtn').classList.add('active');
-        sendToParent({ type:'MIC_READY' });
+        setTranscript('');
+        C_sendToParent({ type:'MIC_READY' });
       };
+
       recognition.onresult = (e) => {
-        const text = e.results[0][0].transcript.trim();
-        setStatus('認識: 「' + text + '」');
-        sendToParent({ type:'VOICE_TEXT', text });
+        const results  = Array.from(e.results);
+        const interim  = results.filter(r => !r.isFinal).map(r => r[0].transcript).join('');
+        const finals   = results.filter(r => r.isFinal);
+
+        if (interim) setTranscript(interim);
+
+        if (finals.length > 0) {
+          const text = finals.map(r => r[0].transcript).join('').trim();
+          setTranscript('「' + text + '」');
+          setStatus('送信中…');
+          C_sendToParent({ type:'VOICE_TEXT', text });
+        }
       };
+
       recognition.onend = () => {
         isMicOn = false;
-        document.getElementById('micBtn').classList.remove('active');
-        if (!isSpeaking) setStatus('待機中');
-        // 自動再起動
-        if (!isSpeaking) setTimeout(startMic, 300);
+        document.getElementById('micBtn').className = '';
+        if (!isSpeaking && autoRestart) {
+          setTimeout(C_startMic, 400);
+        } else {
+          setStatus(autoRestart ? '待機中' : 'タップしてマイクを起動');
+        }
       };
+
       recognition.onerror = (e) => {
-        if (e.error === 'aborted' || e.error === 'no-speech') return;
         isMicOn = false;
-        document.getElementById('micBtn').classList.remove('active');
+        document.getElementById('micBtn').className = '';
+        if (e.error === 'aborted' || e.error === 'no-speech') {
+          if (autoRestart && !isSpeaking) setTimeout(C_startMic, 400);
+          return;
+        }
         setStatus('エラー: ' + e.error);
-        sendToParent({ type:'MIC_ERROR', error: e.error });
+        C_sendToParent({ type:'MIC_ERROR', error: e.error });
       };
+
       recognition.start();
     })
-    .catch(e => {
-      setStatus('許可なし');
-      sendToParent({ type:'MIC_ERROR', error:'マイク許可が拒否されました' });
+    .catch(() => {
+      setStatus('マイクの許可が必要です');
+      C_sendToParent({ type:'MIC_ERROR', error:'マイク許可が拒否されました' });
     });
 }
 
-function stopMic() {
+// ── マイク停止 ──
+function C_stopMic() {
   if (recognition) try { recognition.stop(); } catch(e) {}
   isMicOn = false;
-  document.getElementById('micBtn').classList.remove('active');
-  setStatus('待機中');
+  document.getElementById('micBtn').className = '';
+  setStatus('タップしてマイクを起動');
 }
 
-// TTS
-function speak(text) {
+// ── TTS ──
+function C_speak(text) {
   if (!text || !window.speechSynthesis) return;
   speechSynthesis.cancel();
   isSpeaking = true;
-  setStatus('読み上げ中');
   if (recognition) try { recognition.abort(); } catch(e) {}
+  document.getElementById('micBtn').className = 'speaking';
+  setStatus('読み上げ中…');
+  C_sendToParent({ type:'MIC_SPEAKING' });
 
   setTimeout(() => {
     const utt  = new SpeechSynthesisUtterance(text);
     utt.lang   = 'ja-JP';
     utt.rate   = 1.0;
-    const ja   = speechSynthesis.getVoices().find(v => v.lang === 'ja-JP');
+    const voices = speechSynthesis.getVoices();
+    const ja   = voices.find(v => v.lang === 'ja-JP') || voices.find(v => v.lang.startsWith('ja'));
     if (ja) utt.voice = ja;
-    utt.onend  = () => {
+
+    utt.onend = () => {
       isSpeaking = false;
-      setStatus('待機中');
-      setTimeout(startMic, 300);
+      document.getElementById('micBtn').className = autoRestart ? 'listening' : '';
+      setStatus(autoRestart ? '認識中…' : 'タップしてマイクを起動');
+      setTranscript('');
+      C_sendToParent({ type:'MIC_DONE' });
+      if (autoRestart) setTimeout(C_startMic, 300);
     };
     utt.onerror = (e) => {
       isSpeaking = false;
-      if (e.error !== 'interrupted') setStatus('TTSエラー');
-      else setStatus('待機中');
+      document.getElementById('micBtn').className = '';
+      if (e.error !== 'interrupted') setStatus('読み上げエラー: ' + e.error);
+      C_sendToParent({ type:'MIC_DONE' });
+      if (autoRestart) setTimeout(C_startMic, 300);
     };
     speechSynthesis.speak(utt);
-  }, 200);
+  }, 150);
 }
 
 if (window.speechSynthesis) {
