@@ -40,7 +40,7 @@ body{
 </head>
 <body>
 <button id="micBtn" onclick="C_toggleMic()">🎙</button>
-<div id="status">タップしてマイクを起動</div>
+<div id="status">起動中…</div>
 <div id="transcript"></div>
 
 <script>
@@ -156,7 +156,7 @@ function C_stopMic() {
   if (recognition) try { recognition.stop(); } catch(e) {}
   isMicOn = false;
   document.getElementById('micBtn').className = '';
-  setStatus('タップしてマイクを起動');
+  setStatus('タップして再起動');
 }
 
 // ── TTS（Web Speech APIトレーニング準拠・高品質版）──
@@ -215,7 +215,7 @@ async function C_speakSequentially(segments) {
   // 全セグメント再生完了
   isSpeaking = false;
   document.getElementById('micBtn').className = autoRestart ? 'listening' : '';
-  setStatus(autoRestart ? '認識中…' : 'タップしてマイクを起動');
+  setStatus(autoRestart ? '認識中…' : 'タップして再起動');
   setTranscript('');
   C_sendToParent({ type:'MIC_DONE' });
   if (autoRestart) setTimeout(C_startMic, 300);
@@ -224,6 +224,24 @@ async function C_speakSequentially(segments) {
 if (window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
 }
+
+// ── 自動起動 ──
+window.addEventListener('load', () => {
+  // 音声リスト読み込み後に自動起動
+  setTimeout(() => {
+    autoRestart = true;
+    C_startMic();
+  }, 500);
+});
+
+// ── 本体ページ終了監視 ──
+setInterval(() => {
+  if (!window.opener || window.opener.closed) {
+    // 本体が閉じられたらポップアップも閉じる
+    speechSynthesis.cancel();
+    window.close();
+  }
+}, 1000);
 </script>
 </body>
 </html>
