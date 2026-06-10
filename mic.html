@@ -56,20 +56,8 @@ let autoRestart = false;
 window.addEventListener('message', (e) => {
   const data = e.data;
   if (!data || !data.type) return;
-  if (data.type === 'TTS_SPEAK') {
-    // ① まず即座にマイクをミュート（音声を拾わないよう先に止める）
-    isSpeaking = true;
-    if (recognition) try { recognition.abort(); } catch(ex) {}
-    // ② 少し待ってからTTS再生（マイク停止が確定してから）
-    setTimeout(() => C_speak(data.text), 200);
-  }
-  if (data.type === 'TTS_STOP') {
-    speechSynthesis.cancel();
-    isSpeaking = false;
-    setStatus('待機中');
-    // ③ TTS停止後、マイク再起動まで少し待つ
-    if (autoRestart) setTimeout(C_startMic, 600);
-  }
+  if (data.type === 'TTS_SPEAK') { C_speak(data.text); }
+  if (data.type === 'TTS_STOP')  { speechSynthesis.cancel(); isSpeaking = false; setStatus('待機中'); if (autoRestart) setTimeout(C_startMic, 300); }
 });
 
 // ── 親へメッセージ送信 ──
@@ -137,17 +125,11 @@ function C_startMic() {
       recognition.onend = () => {
         isMicOn = false;
         document.getElementById('micBtn').className = '';
-        // TTS開始のタイミングずれを考慮して少し待ってから判定
-        setTimeout(() => {
-          if (isSpeaking) {
-            // TTS再生中ならマイクは起動しない（TTS完了後に自動再起動）
-            setStatus('読み上げ中…');
-          } else if (autoRestart) {
-            C_startMic();
-          } else {
-            setStatus('タップしてマイクを起動');
-          }
-        }, 600);
+        if (!isSpeaking && autoRestart) {
+          setTimeout(C_startMic, 400);
+        } else {
+          setStatus(autoRestart ? '待機中' : 'タップしてマイクを起動');
+        }
       };
 
       recognition.onerror = (e) => {
@@ -232,12 +214,11 @@ async function C_speakSequentially(segments) {
 
   // 全セグメント再生完了
   isSpeaking = false;
-  document.getElementById('micBtn').className = '';
-  setStatus('待機中');
+  document.getElementById('micBtn').className = autoRestart ? 'listening' : '';
+  setStatus(autoRestart ? '認識中…' : 'タップして再起動');
   setTranscript('');
   C_sendToParent({ type:'MIC_DONE' });
-  // TTS再生直後のエコー防止のため余裕を持って再起動
-  if (autoRestart) setTimeout(C_startMic, 800);
+  if (autoRestart) setTimeout(C_startMic, 300);
 }
 
 if (window.speechSynthesis) {
