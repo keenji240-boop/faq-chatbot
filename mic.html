@@ -125,10 +125,15 @@ function C_startMic() {
       recognition.onend = () => {
         isMicOn = false;
         document.getElementById('micBtn').className = '';
-        if (!isSpeaking && autoRestart) {
+        if (isSpeaking) {
+          // TTS再生中は再起動しない。TTS完了後に自動再起動される
+          setStatus('読み上げ中…');
+          return;
+        }
+        if (autoRestart) {
           setTimeout(C_startMic, 400);
         } else {
-          setStatus(autoRestart ? '待機中' : 'タップしてマイクを起動');
+          setStatus('タップしてマイクを起動');
         }
       };
 
