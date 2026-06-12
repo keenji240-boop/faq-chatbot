@@ -266,8 +266,8 @@ textarea{resize:vertical;min-height:80px}
       onclick="C_loginWithEmail()">続ける</button>
 
     <div class="login-note">
-      Googleアカウントでログインすると大学メンバーとして認識されます。<br>
-      メアドのみ入力の場合は一般ユーザーとして利用できます。
+      大学関係者の方はGoogleアカウントでログインしてください。<br>
+      その他の方はメールアドレスを入力して続けてください。
     </div>
   </div>
 </div>
@@ -383,12 +383,15 @@ async function C_gasCall(action, params) {
   const email = token ? token.email : '';
   const body  = Object.assign({ action, email }, params || {});
   const res   = await fetch(GAS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
+    method:   'POST',
+    redirect: 'follow',                      // GASのリダイレクト(302)に追従
+    headers:  { 'Content-Type': 'text/plain' }, // text/plainでプリフライト回避
     body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch(e) { throw new Error('レスポンス解析エラー: ' + text.slice(0, 100)); }
 }
 
 // ============================================================
@@ -858,7 +861,6 @@ function C_setMicModalStatus(text) {
 function C_speakViaModal(text) {
   if (!text || !window.speechSynthesis) return;
   const ttsText = C_convertForTTS(text);
-  if (speechSynthesis.speaking) speechSynthesis.cancel();
 
   micIsSpeaking = true;
   isSpeaking    = true;
@@ -867,14 +869,27 @@ function C_speakViaModal(text) {
   C_setMicModalStatus('読み上げ中…');
   C_setVoiceStatus('speak');
 
-  const segments = ttsText.split(/(?<=[。、！？!?])/).map(s => s.trim()).filter(s => s);
-  C_speakSegments(segments);
+  const segments = ttsText.split(/(?<=[。、！？!?])/).map(s => s.trim()).filter(s => s.length > 0);
+
+  // iOS対策: voicesが読み込まれてから実行
+  const voices = speechSynthesis.getVoices();
+  if (voices.length > 0) {
+    C_speakSegments(segments);
+  } else {
+    speechSynthesis.onvoiceschanged = () => {
+      speechSynthesis.onvoiceschanged = null;
+      C_speakSegments(segments);
+    };
+  }
 }
 
 // 後方互換
 function C_speakViaPopup(text) { C_speakViaModal(text); }
 
 async function C_speakSegments(segments) {
+  // iOS Safari/Chrome対策: suspendedなら再開
+  if (speechSynthesis.paused) speechSynthesis.resume();
+
   for (let i = 0; i < segments.length; i++) {
     if (!micIsSpeaking) break;
     await new Promise(resolve => {
@@ -888,8 +903,20 @@ async function C_speakSegments(segments) {
                        voices.find(v => v.lang==='ja-JP');
       if (best) utt.voice = best;
       utt.onend  = resolve;
-      utt.onerror = (e) => { if (e.error !== 'interrupted') C_setMicModalStatus('読み上げエラー'); resolve(); };
+      utt.onerror = (e) => {
+        if (e.error !== 'interrupted') C_setMicModalStatus('読み上げエラー');
+        resolve();
+      };
+      // iOS対策: speak前にキャンセルしてから再度speak
+      if (speechSynthesis.speaking) speechSynthesis.cancel();
       speechSynthesis.speak(utt);
+      // iOS長文途中停止バグ対策: 定期的にresumeを呼ぶ
+      const iosKeepAlive = setInterval(() => {
+        if (!speechSynthesis.speaking) { clearInterval(iosKeepAlive); return; }
+        speechSynthesis.pause();
+        speechSynthesis.resume();
+      }, 10000);
+      utt.onend = () => { clearInterval(iosKeepAlive); resolve(); };
     });
   }
   micIsSpeaking = false;
