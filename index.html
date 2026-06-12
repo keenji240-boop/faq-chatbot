@@ -79,9 +79,7 @@ textarea{resize:vertical;min-height:80px}
 @keyframes mascotFloat{0%,100%{transform:translateY(-50%)}50%{transform:translateY(calc(-50% - 6px))}}
 
 /* ── 音声状態インジケーター ── */
-#voiceStatus{position:absolute;bottom:8px;left:10px;z-index:20;display:flex;align-items:center;gap:5px;pointer-events:none;transition:opacity .3s}
-#micModal:not(.hidden) ~ #voiceStatus,
-#animHeader:has(#micModal:not(.hidden)) #voiceStatus{opacity:0}
+#voiceStatus{position:absolute;bottom:8px;left:10px;z-index:20;display:flex;align-items:center;gap:5px;pointer-events:none}
 .vs-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .vs-label{font-size:9px;font-family:monospace;letter-spacing:.04em}
 .vs-off .vs-dot{background:var(--text3)}.vs-off .vs-label{color:var(--text3)}
@@ -186,21 +184,20 @@ textarea{resize:vertical;min-height:80px}
 
 /* ── マイクモーダル ── */
 #micModal{
-  display:flex;align-items:center;
-  position:absolute;top:0;left:0;bottom:0;
-  width:200px;z-index:20;
-  padding:0 10px;
+  position:fixed;inset:0;background:rgba(0,0,0,.7);
+  display:flex;align-items:flex-end;justify-content:center;
+  z-index:8000;padding:0 0 20px 0;
 }
 #micModal.hidden{display:none}
 .mic-card{
-  background:rgba(10,10,22,.75);border:1px solid var(--border2);
-  border-radius:10px;backdrop-filter:blur(6px);
-  padding:8px 12px;width:100%;
-  display:flex;flex-direction:row;align-items:center;gap:8px;
+  background:var(--surface2);border:1px solid var(--border2);
+  border-radius:var(--radius) var(--radius) var(--radius) var(--radius);
+  padding:20px 24px;width:100%;max-width:360px;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
 }
 #micModalBtn{
-  width:36px;height:36px;border-radius:50%;border:none;flex-shrink:0;
-  background:var(--surface3);color:var(--text);font-size:18px;
+  width:72px;height:72px;border-radius:50%;border:none;
+  background:var(--surface3);color:var(--text);font-size:32px;
   cursor:pointer;transition:all .2s;
 }
 #micModalBtn.listening{
@@ -213,18 +210,17 @@ textarea{resize:vertical;min-height:80px}
 }
 @keyframes micPulse{
   0%,100%{box-shadow:0 0 0 0 rgba(232,64,64,.4)}
-  50%{box-shadow:0 0 0 8px rgba(232,64,64,0)}
+  50%{box-shadow:0 0 0 14px rgba(232,64,64,0)}
 }
-.mic-card-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
-#micModalStatus{font-size:10px;color:var(--text2);white-space:nowrap}
+#micModalStatus{font-size:12px;color:var(--text2)}
 #micModalTranscript{
-  font-size:11px;color:var(--text);
-  min-height:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:13px;color:var(--text);text-align:center;
+  min-height:20px;max-width:280px;word-break:break-all;
 }
 #micModalClose{
-  font-size:10px;color:var(--text3);background:transparent;
-  border:1px solid var(--border);border-radius:4px;
-  padding:2px 6px;flex-shrink:0;
+  font-size:11px;color:var(--text2);background:transparent;
+  border:1px solid var(--border2);border-radius:6px;
+  padding:4px 14px;
 }
 </style>
 <?!= include('BgAnimations') ?>
@@ -272,7 +268,14 @@ textarea{resize:vertical;min-height:80px}
 </div>
 
 <!-- マイクモーダル -->
-
+<div id="micModal" class="hidden">
+  <div class="mic-card">
+    <button id="micModalBtn" onclick="C_toggleMicModal()">🎙</button>
+    <div id="micModalStatus">タップしてマイクを起動</div>
+    <div id="micModalTranscript"></div>
+    <button id="micModalClose" onclick="C_closeMicModal()">閉じる</button>
+  </div>
+</div>
 
 <div id="app">
   <!-- Topbar -->
@@ -296,16 +299,6 @@ textarea{resize:vertical;min-height:80px}
         <div class="vs-off" id="voiceStatus">
           <div class="vs-dot"></div>
           <span class="vs-label" id="vsLabel">音声オフ</span>
-        </div>
-        <div id="micModal" class="hidden">
-          <div class="mic-card">
-            <button id="micModalBtn" onclick="C_toggleMicModal()">🎙</button>
-            <div class="mic-card-body">
-              <div id="micModalStatus">タップしてマイクを起動</div>
-              <div id="micModalTranscript"></div>
-            </div>
-            <button id="micModalClose" onclick="C_closeMicModal()">✕</button>
-          </div>
         </div>
       </div>
       <!-- チャットエリア -->
@@ -349,7 +342,7 @@ textarea{resize:vertical;min-height:80px}
 // ============================================================
 //  定数・状態変数
 // ============================================================
-const GAS_URL      = 'https://script.google.com/macros/s/AKfycbwpH5K-Rg1hg9gmzMmHEyWsYce6nrYzPMcEdcQkHw-e4iWxsXMqzkc_L6Br0wFGsJj1BQ/exec';
+const GAS_URL      = 'https://script.google.com/macros/s/AKfycbzVvjzUmCNrGwI3vnIU5MLcrmv6P3HAvUwq8I7IEv1VvNyQbeLdWCmA53V3sNeLs3jeTw/exec';
 const OAUTH_CLIENT_ID = '826029939967-t2d00f9l7p537gtdi6mqt8hl8kn1gml6.apps.googleusercontent.com';
 const TOKEN_KEY = 'faq_token';
 // ANIM_PATTERNS → BgAnimations.html に移管
