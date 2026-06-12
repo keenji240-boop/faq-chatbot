@@ -266,8 +266,8 @@ textarea{resize:vertical;min-height:80px}
       onclick="C_loginWithEmail()">続ける</button>
 
     <div class="login-note">
-      大学関係者の方はGoogleアカウントでログインしてください。<br>
-      その他の方はメールアドレスを入力して続けてください。
+      Googleアカウントでログインすると大学メンバーとして認識されます。<br>
+      メアドのみ入力の場合は一般ユーザーとして利用できます。
     </div>
   </div>
 </div>
@@ -383,15 +383,12 @@ async function C_gasCall(action, params) {
   const email = token ? token.email : '';
   const body  = Object.assign({ action, email }, params || {});
   const res   = await fetch(GAS_URL, {
-    method:   'POST',
-    redirect: 'follow',                      // GASのリダイレクト(302)に追従
-    headers:  { 'Content-Type': 'text/plain' }, // text/plainでプリフライト回避
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(body)
   });
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  try { return JSON.parse(text); }
-  catch(e) { throw new Error('レスポンス解析エラー: ' + text.slice(0, 100)); }
+  return res.json();
 }
 
 // ============================================================
@@ -706,6 +703,15 @@ function C_addBotMsgWithExtras(text, urls) {
 //  チャット送信
 // ============================================================
 function C_sendMessage() {
+  // iOS Safari TTS アンロック（ユーザー操作起点で空発話）
+  if (!ttsUnlocked && window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance('');
+    u.volume = 0;
+    speechSynthesis.speak(u);
+    speechSynthesis.cancel();
+    ttsUnlocked = true;
+  }
+
   const isPC = window.innerWidth > 1320;
   const el   = isPC ? document.getElementById('inputTextPC') : document.getElementById('inputText');
   const text = el.value.trim();
@@ -752,10 +758,19 @@ let micRecognition = null;
 let micIsOn        = false;
 let micIsSpeaking  = false;
 let micAutoRestart = false;
+let ttsUnlocked    = false;  // iOS TTSアンロック済みフラグ
 
 function C_openMicPopup() { C_openMicModal(); }  // 後方互換
 
 function C_openMicModal() {
+  // マイクボタンタップもユーザー操作起点 → TTSアンロック
+  if (!ttsUnlocked && window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance('');
+    u.volume = 0;
+    speechSynthesis.speak(u);
+    speechSynthesis.cancel();
+    ttsUnlocked = true;
+  }
   document.getElementById('micModal').classList.remove('hidden');
   document.getElementById('micPopupBtn').textContent = '🎙 音声中';
   C_setVoiceStatus('popup');
@@ -860,7 +875,22 @@ function C_setMicModalStatus(text) {
 // TTS（インライン版）
 function C_speakViaModal(text) {
   if (!text || !window.speechSynthesis) return;
+
+  // iOS未アンロック時 → チャットに許可ボタンを表示して保留
+  if (!ttsUnlocked) {
+    C_showTtsUnlockBtn(text);
+    return;
+  }
+
+  const voices = speechSynthesis.getVoices();
+  if (!voices.length) {
+    // voicesがまだ空（iOS初回）→ 少し待って再試行
+    setTimeout(() => C_speakViaModal(text), 350);
+    return;
+  }
+
   const ttsText = C_convertForTTS(text);
+  if (speechSynthesis.speaking) speechSynthesis.cancel();
 
   micIsSpeaking = true;
   isSpeaking    = true;
@@ -869,17 +899,62 @@ function C_speakViaModal(text) {
   C_setMicModalStatus('読み上げ中…');
   C_setVoiceStatus('speak');
 
-  const segments = ttsText.split(/(?<=[。、！？!?])/).map(s => s.trim()).filter(s => s.length > 0);
+  const segments = ttsText.split(/(?<=[。、！？!?])/).map(s => s.trim()).filter(s => s);
+  C_speakSegments(segments);
+}
 
-  // iOS対策: voicesが読み込まれてから実行
-  const voices = speechSynthesis.getVoices();
-  if (voices.length > 0) {
-    C_speakSegments(segments);
-  } else {
-    speechSynthesis.onvoiceschanged = () => {
-      speechSynthesis.onvoiceschanged = null;
-      C_speakSegments(segments);
-    };
+// iOS用：読み上げ許可ボタンをチャットに表示
+function C_showTtsUnlockBtn(pendingText) {
+  // すでに表示中なら更新だけ
+  const existing = document.getElementById('ttsUnlockRow');
+  if (existing) {
+    existing.dataset.pending = pendingText;
+    return;
+  }
+  const chat = document.getElementById('chatArea');
+  const row  = document.createElement('div');
+  row.id = 'ttsUnlockRow';
+  row.className = 'msg-row system';
+  row.dataset.pending = pendingText;
+  row.innerHTML =
+    '<div class="msg-icon-system">🔊</div>' +
+    '<div class="msg-bubble msg-system">' +
+      '<div style="margin-bottom:8px;line-height:1.7">読み上げを有効にしますか？<br>' +
+      '<span style="font-size:11px;color:var(--text2)">iOSでは最初に許可が必要です</span></div>' +
+      '<div style="display:flex;gap:6px">' +
+        '<button class="btn btn-ghost btn-sm" onclick="C_ttsUnlockDecline()">使わない</button>' +
+        '<button class="btn btn-primary btn-sm" onclick="C_ttsUnlockAccept(this)">🔊 読み上げを許可する</button>' +
+      '</div>' +
+    '</div>';
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function C_ttsUnlockAccept(btn) {
+  // ユーザー操作起点でアンロック
+  const u = new SpeechSynthesisUtterance('');
+  u.volume = 0;
+  speechSynthesis.speak(u);
+  speechSynthesis.cancel();
+  ttsUnlocked = true;
+
+  const row = document.getElementById('ttsUnlockRow');
+  const pending = row ? row.dataset.pending : '';
+  if (row) {
+    row.querySelector('.msg-bubble').innerHTML =
+      '読み上げを有効にしました。';
+    row.id = '';
+  }
+  if (pending) setTimeout(() => C_speakViaModal(pending), 200);
+}
+
+function C_ttsUnlockDecline() {
+  ttsUnlocked = true; // ボタン再表示しない
+  const row = document.getElementById('ttsUnlockRow');
+  if (row) {
+    row.querySelector('.msg-bubble').innerHTML =
+      '読み上げをスキップします。テキストでご確認ください。';
+    row.id = '';
   }
 }
 
@@ -887,9 +962,6 @@ function C_speakViaModal(text) {
 function C_speakViaPopup(text) { C_speakViaModal(text); }
 
 async function C_speakSegments(segments) {
-  // iOS Safari/Chrome対策: suspendedなら再開
-  if (speechSynthesis.paused) speechSynthesis.resume();
-
   for (let i = 0; i < segments.length; i++) {
     if (!micIsSpeaking) break;
     await new Promise(resolve => {
@@ -903,20 +975,8 @@ async function C_speakSegments(segments) {
                        voices.find(v => v.lang==='ja-JP');
       if (best) utt.voice = best;
       utt.onend  = resolve;
-      utt.onerror = (e) => {
-        if (e.error !== 'interrupted') C_setMicModalStatus('読み上げエラー');
-        resolve();
-      };
-      // iOS対策: speak前にキャンセルしてから再度speak
-      if (speechSynthesis.speaking) speechSynthesis.cancel();
+      utt.onerror = (e) => { if (e.error !== 'interrupted') C_setMicModalStatus('読み上げエラー'); resolve(); };
       speechSynthesis.speak(utt);
-      // iOS長文途中停止バグ対策: 定期的にresumeを呼ぶ
-      const iosKeepAlive = setInterval(() => {
-        if (!speechSynthesis.speaking) { clearInterval(iosKeepAlive); return; }
-        speechSynthesis.pause();
-        speechSynthesis.resume();
-      }, 10000);
-      utt.onend = () => { clearInterval(iosKeepAlive); resolve(); };
     });
   }
   micIsSpeaking = false;
