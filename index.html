@@ -627,8 +627,10 @@ function C_addMsg(type, text, isLoading) {
   row.className = 'msg-row ' + type;
 
   const iconDiv = document.createElement('div');
+  // インラインアイコン（GASはファイル参照不可のためemoji使用）
   const iconClass = { bot:'msg-icon-bot', user:'msg-icon-user', system:'msg-icon-system', error:'msg-icon-system', loading:'msg-icon-bot' };
   iconDiv.className = iconClass[type] || 'msg-icon-system';
+  // SVGアイコン or 絵文字フォールバック
   if (type === 'bot' || type === 'loading') {
     iconDiv.innerHTML = window.C_getBotIconSVG ? window.C_getBotIconSVG() : '🤖';
   } else if (type === 'user') {
@@ -645,25 +647,6 @@ function C_addMsg(type, text, isLoading) {
     row.classList.add('msg-loading');
   } else {
     bubble.textContent = text;
-    // iOS対策: 自動再生がブロックされた際の手動救済およびリプレイ用スピーカーボタン
-    if (type === 'bot' && window.speechSynthesis) {
-      const speakBtn = document.createElement('button');
-      speakBtn.innerHTML = '🔊';
-      speakBtn.style.background = 'none';
-      speakBtn.style.border = 'none';
-      speakBtn.style.color = 'var(--text2)';
-      speakBtn.style.marginLeft = '8px';
-      speakBtn.style.cursor = 'pointer';
-      speakBtn.style.fontSize = '12px';
-      speakBtn.style.display = 'inline-block';
-      speakBtn.title = '読み上げる';
-      speakBtn.onclick = (e) => {
-        e.stopPropagation();
-        C_unlockTTS(true); // タップと同期的アンロック
-        C_speakViaModal(text);
-      };
-      bubble.appendChild(speakBtn);
-    }
   }
   row.appendChild(bubble);
   if (type === 'user') row.appendChild(iconDiv);
@@ -727,10 +710,6 @@ function C_sendMessage() {
   const el   = isPC ? document.getElementById('inputTextPC') : document.getElementById('inputText');
   const text = el.value.trim();
   if (!text) { C_addMsg('error', '質問を入力してください。'); return; }
-
-  // iOS対策: 送信をトリガーしたユーザー操作と同期的（非同期 fetch の前）にアンロックを実行する
-  C_unlockTTS(true);
-
   el.value = ''; el.style.height = 'auto';
 
   C_addMsg('user', text);
@@ -808,7 +787,7 @@ function C_startMicModal() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { C_setMicModalStatus('音声認識非対応のブラウザです'); return; }
 
-  // iOS対策: タップイベント内でTTSをアンロック（無音・0秒）
+  // iOS対策: タップと同期的にTTSアンロック（毎回実行・micvoice.html成功パターン）
   C_unlockTTS();
 
   navigator.mediaDevices.getUserMedia({ audio:true })
@@ -827,7 +806,7 @@ function C_startMicModal() {
         C_setVoiceStatus('listen');
       };
 
-      micRecognition.onresult = (e) => {
+      micRecognition.onresult = async (e) => {
         const results = Array.from(e.results);
         const interim = results.filter(r => !r.isFinal).map(r => r[0].transcript).join('');
         const finals  = results.filter(r => r.isFinal);
@@ -842,6 +821,8 @@ function C_startMicModal() {
               ? document.getElementById('inputTextPC')
               : document.getElementById('inputText');
             el.value = text;
+            // iOS対策: awaitで少し待ってからsendMessage（micvoice.html成功パターン）
+            await new Promise(resolve => setTimeout(resolve, 300));
             C_sendMessage();
           }
         }
@@ -881,136 +862,118 @@ function C_setMicModalStatus(text) {
   document.getElementById('micModalStatus').textContent = text;
 }
 
-let g_audioCtx = null;
-
-// iOS対策: Web Audio API & SpeechSynthesis の両方をユーザー操作時にアンロックする
-function C_unlockTTS(force = false) {
-  if (!force && window._ttsUnlocked) return;
+// iOS対策: TTSアンロック（ユーザー操作コンテキスト内で無音発話）
+function C_unlockTTS() {
+  if (window._ttsUnlocked) return;
   if (!window.speechSynthesis) return;
   try {
-    // 1. Web Audio Context の初期化とアクティブ化
-    if (typeof window.AudioContext !== 'undefined' || typeof window.webkitAudioContext !== 'undefined') {
-      if (!g_audioCtx) {
-        g_audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (g_audioCtx.state === 'suspended') {
-        g_audioCtx.resume().catch(() => {});
-      }
-      // 無音のバッファソースを再生してオーディオセッションを維持
-      const buffer = g_audioCtx.createBuffer(1, 1, 22050);
-      const source = g_audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(g_audioCtx.destination);
-      source.start(0);
-    }
-
-    // 2. SpeechSynthesis のアンロック (cancelは呼ばず直接無音を再生してセッションを開始)
-    const utt = new SpeechSynthesisUtterance('');
-    utt.volume = 0;
-    utt.lang = 'ja-JP';
+    const utt    = new SpeechSynthesisUtterance('');
+    utt.volume   = 0;
+    utt.lang     = 'ja-JP';
+    utt.onend    = () => {};
+    utt.onerror  = () => {};
     speechSynthesis.speak(utt);
-    
     window._ttsUnlocked = true;
-    console.log('[TTS] iOS Web Audio & SpeechSynthesis unlock完了');
+    console.log('[TTS] iOS unlock完了');
   } catch(e) {
     console.log('[TTS] unlock失敗:', e);
   }
 }
 
-// TTS（インライン版） - iOSで実績のある単一発話方式で再生
-function C_speakViaModal(text) {
+// TTS（インライン版・micvoice.html成功パターン適用）
+async function C_speakViaModal(text) {
   if (!text || !window.speechSynthesis) return;
-
   const ttsText = C_convertForTTS(text);
 
   micIsSpeaking = true;
   isSpeaking    = true;
-
-  // iOS対策: すでに別の音声が再生中の場合のみキャンセルし、解放までのウェイト(150ms)を入れる
-  // (再生中でないときにcancelを呼ぶと、直後のspeakがSafariで無視されるバグを防止します)
-  let cancelDelay = 0;
-  if (speechSynthesis.speaking) {
-    try { speechSynthesis.cancel(); } catch(e) {}
-    cancelDelay = 150;
-  }
-
-  // iOS対策: 音声認識が動いていた場合のみ、認識停止→TTS開始の切り替えウェイト(700ms)を入れる
-  let delay = 0;
-  if (micRecognition && micIsOn) {
-    try { micRecognition.abort(); } catch(ex) {}
-    micIsOn = false;
-    delay = 700;
-  }
-
-  // 最大のウェイト時間を適用
-  delay = Math.max(delay, cancelDelay);
-
+  if (micRecognition) try { micRecognition.abort(); } catch(ex) {}
   document.getElementById('micModalBtn').className = 'speaking';
   C_setMicModalStatus('読み上げ中…');
   C_setVoiceStatus('speak');
 
-  const doSpeak = () => {
-    const voices = speechSynthesis.getVoices();
-    const normalizeLang = (l) => l.replace('_', '-').toLowerCase();
-    
-    const best = voices.find(v => {
-      const l = normalizeLang(v.lang);
-      return l === 'ja-jp' && v.name.includes('Google');
-    }) || voices.find(v => {
-      const l = normalizeLang(v.lang);
-      return l === 'ja-jp' && v.name.includes('Kyoko');
-    }) || voices.find(v => {
-      const l = normalizeLang(v.lang);
-      return l.startsWith('ja-');
+  const segments = ttsText.split(/(?<=[。、！？!?])/).map(s => s.trim()).filter(s => s.length > 0);
+
+  // iOS対策: awaitで700ms待機（setTimeoutより安定・micvoice.html成功パターン）
+  if (speechSynthesis.paused) speechSynthesis.resume();
+  await new Promise(resolve => setTimeout(resolve, 700));
+
+  // voices未読み込みなら待機
+  const voices = speechSynthesis.getVoices();
+  if (voices.length === 0) {
+    await new Promise(resolve => {
+      speechSynthesis.onvoiceschanged = () => {
+        speechSynthesis.onvoiceschanged = null;
+        resolve();
+      };
     });
+  }
 
-    // iOS Safariでの途切れを防ぐため、分割せず単一の発話オブジェクトとして再生
-    const utt = new SpeechSynthesisUtterance(ttsText);
-    utt.rate = 1.0;
-    utt.pitch = 1.0;
-
-    if (best) {
-      utt.voice = best;
-      utt.lang  = best.lang; // 音声と言語設定のミスマッチを防ぐ
-    } else {
-      utt.lang  = 'ja-JP';
-    }
-
-    utt.onend = () => {
-      micIsSpeaking = false;
-      isSpeaking    = false;
-      document.getElementById('micModalBtn').className = '';
-      C_setMicModalStatus('待機中…');
-      document.getElementById('micModalTranscript').textContent = '';
-      C_setVoiceStatus('popup');
-
-      // iOS対策: TTS→音声認識の切り替えにディレイを置く
-      if (micAutoRestart) {
-        setTimeout(() => {
-          C_setMicModalStatus('認識中…');
-          C_startMicModal();
-        }, 200);
-      } else {
-        C_setMicModalStatus('タップしてマイクを起動');
-      }
-    };
-
-    utt.onerror = (e) => {
-      console.log('TTS再生エラー:', e.error);
-      utt.onend();
-    };
-
-    speechSynthesis.speak(utt);
-  };
-
-  setTimeout(doSpeak, delay);
+  C_speakSegments(segments);
 }
 
-// 後方互換用のダミー関数
+// 後方互換
 function C_speakViaPopup(text) { C_speakViaModal(text); }
-function C_speakSegments(segments) {
-  // 分割読み上げは廃止し、C_speakViaModal単一で動作させます
-  C_speakViaModal(segments.join(''));
+
+async function C_speakSegments(segments) {
+  // iOS Safari/Chrome対策: suspendedなら再開
+  if (speechSynthesis.paused) speechSynthesis.resume();
+
+  for (let i = 0; i < segments.length; i++) {
+    if (!micIsSpeaking) break;
+    await new Promise(resolve => {
+      const utt  = new SpeechSynthesisUtterance(segments[i]);
+      utt.lang   = 'ja-JP';
+      utt.rate   = 1.0;
+      utt.pitch  = 1.0;
+      const voices   = speechSynthesis.getVoices();
+      const best     = voices.find(v => v.lang==='ja-JP' && v.name.includes('Google')) ||
+                       voices.find(v => v.lang==='ja-JP' && v.name.includes('Kyoko')) ||
+                       voices.find(v => v.lang==='ja-JP');
+      if (best) utt.voice = best;
+
+      let iosKeepAlive = null;
+
+      const onEnd = () => {
+        if (iosKeepAlive) { clearInterval(iosKeepAlive); iosKeepAlive = null; }
+        resolve();
+      };
+      utt.onend   = onEnd;
+      utt.onerror = (e) => {
+        if (e.error !== 'interrupted') C_setMicModalStatus('読み上げエラー: ' + e.error);
+        onEnd();
+      };
+
+      speechSynthesis.speak(utt);
+
+      // iOS長文途中停止バグ対策: 10秒ごとにpause/resume
+      iosKeepAlive = setInterval(() => {
+        if (!speechSynthesis.speaking) { clearInterval(iosKeepAlive); iosKeepAlive = null; return; }
+        speechSynthesis.pause();
+        speechSynthesis.resume();
+      }, 10000);
+    });
+
+    // セグメント間のウェイト（iOS安定化）
+    if (i < segments.length - 1 && micIsSpeaking) {
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+  micIsSpeaking = false;
+  isSpeaking    = false;
+  document.getElementById('micModalBtn').className = '';
+  C_setMicModalStatus('待機中…');
+  document.getElementById('micModalTranscript').textContent = '';
+  C_setVoiceStatus('popup');
+  // iOS対策: TTS→音声認識の切り替えに200ms（micvoice.html成功パターン）
+  if (micAutoRestart) {
+    C_setMicModalStatus('待機中…');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    C_setMicModalStatus('認識中…');
+    C_startMicModal();
+  } else {
+    C_setMicModalStatus('タップしてマイクを起動');
+  }
 }
 
 if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
