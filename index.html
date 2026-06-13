@@ -921,6 +921,10 @@ function C_unlockTTS(force = false) {
 // TTS（インライン版）
 function C_speakViaModal(text) {
   if (!text || !window.speechSynthesis) return;
+
+  // iOS対策: 音声エンジンが詰まるのを防ぐためキューをクリアする
+  try { speechSynthesis.cancel(); } catch(e) {}
+
   const ttsText = C_convertForTTS(text);
 
   micIsSpeaking = true;
@@ -959,23 +963,34 @@ function C_speakViaModal(text) {
 function C_speakViaPopup(text) { C_speakViaModal(text); }
 
 async function C_speakSegments(segments) {
-  // iOS Safari/Chrome対策: 念のため一時停止状態なら再開
-  if (speechSynthesis.paused) {
-    try { speechSynthesis.resume(); } catch(e) {}
-  }
-
   for (let i = 0; i < segments.length; i++) {
     if (!micIsSpeaking) break;
     await new Promise(resolve => {
       const utt  = new SpeechSynthesisUtterance(segments[i]);
-      utt.lang   = 'ja-JP';
       utt.rate   = 1.0;
       utt.pitch  = 1.0;
+      
+      // iOS / Safari 向けの堅牢な日本語音声検索
       const voices   = speechSynthesis.getVoices();
-      const best     = voices.find(v => v.lang==='ja-JP' && v.name.includes('Google')) ||
-                       voices.find(v => v.lang==='ja-JP' && v.name.includes('Kyoko')) ||
-                       voices.find(v => v.lang==='ja-JP');
-      if (best) utt.voice = best;
+      const normalizeLang = (l) => l.replace('_', '-').toLowerCase();
+      
+      const best = voices.find(v => {
+        const l = normalizeLang(v.lang);
+        return l === 'ja-jp' && v.name.includes('Google');
+      }) || voices.find(v => {
+        const l = normalizeLang(v.lang);
+        return l === 'ja-jp' && v.name.includes('Kyoko');
+      }) || voices.find(v => {
+        const l = normalizeLang(v.lang);
+        return l.startsWith('ja-');
+      });
+
+      if (best) {
+        utt.voice = best;
+        utt.lang  = best.lang; // 音声と言語設定のミスマッチを防ぐ
+      } else {
+        utt.lang  = 'ja-JP';
+      }
 
       const onEnd = () => {
         resolve();
