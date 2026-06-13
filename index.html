@@ -627,10 +627,8 @@ function C_addMsg(type, text, isLoading) {
   row.className = 'msg-row ' + type;
 
   const iconDiv = document.createElement('div');
-  // インラインアイコン（GASはファイル参照不可のためemoji使用）
   const iconClass = { bot:'msg-icon-bot', user:'msg-icon-user', system:'msg-icon-system', error:'msg-icon-system', loading:'msg-icon-bot' };
   iconDiv.className = iconClass[type] || 'msg-icon-system';
-  // SVGアイコン or 絵文字フォールバック
   if (type === 'bot' || type === 'loading') {
     iconDiv.innerHTML = window.C_getBotIconSVG ? window.C_getBotIconSVG() : '🤖';
   } else if (type === 'user') {
@@ -647,6 +645,25 @@ function C_addMsg(type, text, isLoading) {
     row.classList.add('msg-loading');
   } else {
     bubble.textContent = text;
+    // iOS対策: 自動再生がブロックされた際の手動救済およびリプレイ用スピーカーボタン
+    if (type === 'bot' && window.speechSynthesis) {
+      const speakBtn = document.createElement('button');
+      speakBtn.innerHTML = '🔊';
+      speakBtn.style.background = 'none';
+      speakBtn.style.border = 'none';
+      speakBtn.style.color = 'var(--text2)';
+      speakBtn.style.marginLeft = '8px';
+      speakBtn.style.cursor = 'pointer';
+      speakBtn.style.fontSize = '12px';
+      speakBtn.style.display = 'inline-block';
+      speakBtn.title = '読み上げる';
+      speakBtn.onclick = (e) => {
+        e.stopPropagation();
+        C_unlockTTS(true); // タップと同期的アンロック
+        C_speakViaModal(text);
+      };
+      bubble.appendChild(speakBtn);
+    }
   }
   row.appendChild(bubble);
   if (type === 'user') row.appendChild(iconDiv);
@@ -710,6 +727,10 @@ function C_sendMessage() {
   const el   = isPC ? document.getElementById('inputTextPC') : document.getElementById('inputText');
   const text = el.value.trim();
   if (!text) { C_addMsg('error', '質問を入力してください。'); return; }
+
+  // iOS対策: 送信をトリガーしたユーザー操作と同期的（非同期 fetch の前）にアンロックを実行する
+  C_unlockTTS(true);
+
   el.value = ''; el.style.height = 'auto';
 
   C_addMsg('user', text);
@@ -860,19 +881,38 @@ function C_setMicModalStatus(text) {
   document.getElementById('micModalStatus').textContent = text;
 }
 
-// iOS対策: TTSアンロック（ユーザー操作コンテキスト内で無音発話）
-function C_unlockTTS() {
-  if (window._ttsUnlocked) return;
+let g_audioCtx = null;
+
+// iOS対策: Web Audio API & SpeechSynthesis の両方をユーザー操作時にアンロックする
+function C_unlockTTS(force = false) {
+  if (!force && window._ttsUnlocked) return;
   if (!window.speechSynthesis) return;
   try {
-    const utt    = new SpeechSynthesisUtterance('');
-    utt.volume   = 0;
-    utt.lang     = 'ja-JP';
-    utt.onend    = () => {};
-    utt.onerror  = () => {};
+    // 1. Web Audio Context の初期化とアクティブ化
+    if (typeof window.AudioContext !== 'undefined' || typeof window.webkitAudioContext !== 'undefined') {
+      if (!g_audioCtx) {
+        g_audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (g_audioCtx.state === 'suspended') {
+        g_audioCtx.resume().catch(() => {});
+      }
+      // 無音のバッファソースを再生してオーディオセッションを維持
+      const buffer = g_audioCtx.createBuffer(1, 1, 22050);
+      const source = g_audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(g_audioCtx.destination);
+      source.start(0);
+    }
+
+    // 2. SpeechSynthesis のアンロック
+    speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance('');
+    utt.volume = 0;
+    utt.lang = 'ja-JP';
     speechSynthesis.speak(utt);
+    
     window._ttsUnlocked = true;
-    console.log('[TTS] iOS unlock完了');
+    console.log('[TTS] iOS Web Audio & SpeechSynthesis unlock完了');
   } catch(e) {
     console.log('[TTS] unlock失敗:', e);
   }
@@ -885,15 +925,21 @@ function C_speakViaModal(text) {
 
   micIsSpeaking = true;
   isSpeaking    = true;
-  if (micRecognition) try { micRecognition.abort(); } catch(ex) {}
+
+  // iOS対策: 音声認識が動いていた場合のみ、認識停止→TTS開始の切り替えウェイトを入れる
+  let delay = 0;
+  if (micRecognition && micIsOn) {
+    try { micRecognition.abort(); } catch(ex) {}
+    micIsOn = false;
+    delay = 700; // 認識から再生への切り替えディレイ
+  }
+
   document.getElementById('micModalBtn').className = 'speaking';
   C_setMicModalStatus('読み上げ中…');
   C_setVoiceStatus('speak');
 
   const segments = ttsText.split(/(?<=[。、！？!?])/).map(s => s.trim()).filter(s => s.length > 0);
 
-  // iOS対策: 記事の推奨に従い700ms待ってから再生
-  // （音声認識停止→TTS開始の切り替えウェイト）
   const doSpeak = () => {
     const voices = speechSynthesis.getVoices();
     if (voices.length > 0) {
@@ -906,21 +952,17 @@ function C_speakViaModal(text) {
     }
   };
 
-  // iOS: suspended状態を解除してから実行
-  if (speechSynthesis.paused) {
-    speechSynthesis.resume();
-    setTimeout(doSpeak, 700);
-  } else {
-    setTimeout(doSpeak, 700);
-  }
+  setTimeout(doSpeak, delay);
 }
 
 // 後方互換
 function C_speakViaPopup(text) { C_speakViaModal(text); }
 
 async function C_speakSegments(segments) {
-  // iOS Safari/Chrome対策: suspendedなら再開
-  if (speechSynthesis.paused) speechSynthesis.resume();
+  // iOS Safari/Chrome対策: 念のため一時停止状態なら再開
+  if (speechSynthesis.paused) {
+    try { speechSynthesis.resume(); } catch(e) {}
+  }
 
   for (let i = 0; i < segments.length; i++) {
     if (!micIsSpeaking) break;
@@ -935,29 +977,19 @@ async function C_speakSegments(segments) {
                        voices.find(v => v.lang==='ja-JP');
       if (best) utt.voice = best;
 
-      let iosKeepAlive = null;
-
       const onEnd = () => {
-        if (iosKeepAlive) { clearInterval(iosKeepAlive); iosKeepAlive = null; }
         resolve();
       };
       utt.onend   = onEnd;
       utt.onerror = (e) => {
-        if (e.error !== 'interrupted') C_setMicModalStatus('読み上げエラー: ' + e.error);
+        console.log('TTS再生エラー:', e.error);
         onEnd();
       };
 
       speechSynthesis.speak(utt);
-
-      // iOS長文途中停止バグ対策: 10秒ごとにpause/resume
-      iosKeepAlive = setInterval(() => {
-        if (!speechSynthesis.speaking) { clearInterval(iosKeepAlive); iosKeepAlive = null; return; }
-        speechSynthesis.pause();
-        speechSynthesis.resume();
-      }, 10000);
     });
 
-    // セグメント間のウェイト（iOS安定化）
+    // セグメント間のウェイト（iOSの挙動安定化）
     if (i < segments.length - 1 && micIsSpeaking) {
       await new Promise(r => setTimeout(r, 150));
     }
@@ -968,12 +1000,16 @@ async function C_speakSegments(segments) {
   C_setMicModalStatus('待機中…');
   document.getElementById('micModalTranscript').textContent = '';
   C_setVoiceStatus('popup');
-  // iOS対策: TTS→音声認識の切り替えに200ms（記事推奨値）
-  if (micAutoRestart) setTimeout(() => {
-    C_setMicModalStatus('認識中…');
-    C_startMicModal();
-  }, 200);
-  else C_setMicModalStatus('タップしてマイクを起動');
+
+  // iOS対策: TTS→音声認識の切り替えにディレイを置く
+  if (micAutoRestart) {
+    setTimeout(() => {
+      C_setMicModalStatus('認識中…');
+      C_startMicModal();
+    }, 200);
+  } else {
+    C_setMicModalStatus('タップしてマイクを起動');
+  }
 }
 
 if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
