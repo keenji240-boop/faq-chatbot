@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>音声テスト - 鳥取大学</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#06060f;--surface:#0d0f1e;--surface2:#13162a;
+  --border:#2a2e4a;--text:#c8d0f0;--text2:#7b80a0;
+  --blue:#4f8ef7;--green:#4a9a4a;--amber:#c8922a;--red:#e05050;
+}
+body{
+  font-family:'Noto Sans JP',sans-serif;
+  background:var(--bg);color:var(--text);
+  min-height:100vh;padding:16px;max-width:480px;margin:0 auto;
+}
+h1{font-size:16px;color:var(--blue);margin-bottom:4px}
+.subtitle{font-size:11px;color:var(--text2);margin-bottom:20px}
+
+/* ── カード ── */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:16px;margin-bottom:14px;
+}
+.card-title{
+  font-size:12px;font-weight:bold;color:var(--text2);
+  letter-spacing:.08em;margin-bottom:12px;
+  display:flex;align-items:center;gap:8px;
+}
+.step-num{
+  width:22px;height:22px;border-radius:50%;
+  background:rgba(79,142,247,.2);color:var(--blue);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:bold;flex-shrink:0;
+}
+
+/* ── ステータス ── */
+.status{
+  font-size:13px;padding:10px 12px;border-radius:8px;
+  background:var(--surface2);margin-bottom:10px;
+  min-height:42px;line-height:1.5;
+}
+.status.ok   {border-left:3px solid var(--green)}
+.status.warn {border-left:3px solid var(--amber)}
+.status.err  {border-left:3px solid var(--red)}
+.status.info {border-left:3px solid var(--blue)}
+
+/* ── ボタン ── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 18px;border-radius:8px;border:none;
+  font-size:13px;font-weight:bold;cursor:pointer;
+  transition:all .2s;width:100%;margin-bottom:6px;
+}
+.btn-blue  {background:var(--blue);color:#fff}
+.btn-blue:hover{filter:brightness(1.15)}
+.btn-green {background:rgba(74,154,74,.3);color:var(--green);border:1px solid var(--green)}
+.btn-red   {background:rgba(224,80,80,.3);color:var(--red);border:1px solid var(--red)}
+.btn-amber {background:rgba(200,146,42,.3);color:var(--amber);border:1px solid var(--amber)}
+.btn-gray  {background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:7px 14px;font-size:12px;width:auto;margin-bottom:0}
+
+/* ── マイクボタン ── */
+.mic-btn{
+  width:80px;height:80px;border-radius:50%;border:none;
+  background:var(--surface2);color:var(--text);font-size:36px;
+  cursor:pointer;transition:all .2s;margin:0 auto 10px;display:block;
+  border:2px solid var(--border);
+}
+.mic-btn.listening{
+  background:rgba(232,64,64,.15);color:#e84040;
+  border-color:#e84040;
+  animation:pulse .8s ease-in-out infinite;
+}
+.mic-btn.speaking{
+  background:rgba(64,128,232,.15);color:#4080e8;
+  border-color:#4080e8;
+  animation:pulse .6s ease-in-out infinite;
+}
+@keyframes pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(232,64,64,.3)}
+  50%{box-shadow:0 0 0 14px rgba(232,64,64,0)}
+}
+
+/* ── テキスト入力 ── */
+textarea{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:10px;color:var(--text);font-size:13px;
+  resize:none;height:70px;margin-bottom:8px;
+}
+textarea:focus{outline:none;border-color:var(--blue)}
+
+/* ── ログ ── */
+.log-area{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:10px;
+  font-size:11px;font-family:monospace;
+  height:160px;overflow-y:auto;
+  color:var(--text2);
+}
+.log-line{margin-bottom:3px;line-height:1.4}
+.log-line.ok  {color:var(--green)}
+.log-line.err {color:var(--red)}
+.log-line.info{color:var(--blue)}
+.log-line.warn{color:var(--amber)}
+
+/* ── 環境情報 ── */
+.env-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px}
+.env-item{background:var(--surface2);border-radius:6px;padding:6px 8px}
+.env-label{color:var(--text2);margin-bottom:2px}
+.env-val{font-weight:bold}
+.env-val.ok {color:var(--green)}
+.env-val.ng {color:var(--red)}
+.env-val.warn{color:var(--amber)}
+
+/* ── transcript ── */
+#transcript{
+  font-size:14px;color:var(--text);text-align:center;
+  min-height:24px;padding:6px;word-break:break-all;
+  background:var(--surface2);border-radius:8px;margin-bottom:8px;
+}
+</style>
+</head>
+<body>
+
+<h1>🎙 音声テスト</h1>
+<p class="subtitle">マイク・音声認識・読み上げの動作確認ページ</p>
+
+<!-- ── STEP1: 環境確認 ── -->
+<div class="card">
+  <div class="card-title"><div class="step-num">1</div>環境確認</div>
+  <div class="env-grid" id="envGrid">
+    <div class="env-item"><div class="env-label">ブラウザ</div><div class="env-val" id="envBrowser">確認中…</div></div>
+    <div class="env-item"><div class="env-label">OS</div><div class="env-val" id="envOS">確認中…</div></div>
+    <div class="env-item"><div class="env-label">SpeechRecognition</div><div class="env-val" id="envSR">確認中…</div></div>
+    <div class="env-item"><div class="env-label">speechSynthesis</div><div class="env-val" id="envTTS">確認中…</div></div>
+    <div class="env-item"><div class="env-label">getUserMedia</div><div class="env-val" id="envMic">確認中…</div></div>
+    <div class="env-item"><div class="env-label">HTTPS</div><div class="env-val" id="envHTTPS">確認中…</div></div>
+  </div>
+</div>
+
+<!-- ── STEP2: マイク許可 ── -->
+<div class="card">
+  <div class="card-title"><div class="step-num">2</div>マイク許可</div>
+  <div class="status info" id="micPermStatus">
+    マイクを使用するには許可が必要です。<br>
+    「許可を申請」ボタンを押すとブラウザから確認が表示されます。
+  </div>
+  <button class="btn btn-blue" id="btnMicPerm" onclick="T_requestMicPermission()">
+    🎙 マイク許可を申請
+  </button>
+</div>
+
+<!-- ── iOS対策トグル ── -->
+<div class="card">
+  <div class="card-title">⚙️ iOS対策設定</div>
+  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0">
+    <input type="checkbox" id="iosWorkaround" checked
+      style="width:18px;height:18px;cursor:pointer">
+    <span style="font-size:13px">iOS対策ON（タップと同期的にTTSアンロック）<br>
+      <span style="font-size:11px;color:var(--text2)">iPhoneでは必ずONにしてください</span>
+    </span>
+  </label>
+</div>
+
+<!-- ── STEP3: TTSアンロック ── -->
+<div class="card">
+  <div class="card-title"><div class="step-num">3</div>読み上げアンロック（iOS必須）</div>
+  <div class="status warn" id="ttsUnlockStatus">
+    iOSでは最初にこのボタンをタップしてください。<br>
+    タップ操作のコンテキストで読み上げ権限を取得します。
+  </div>
+  <button class="btn btn-amber" id="btnTTSUnlock" onclick="T_unlockTTS()">
+    🔓 読み上げをアンロック
+  </button>
+</div>
+
+<!-- ── STEP4: 音声認識テスト ── -->
+<div class="card">
+  <div class="card-title"><div class="step-num">4</div>音声認識テスト</div>
+  <button class="mic-btn" id="micBtn" onclick="T_toggleMic()">🎙</button>
+  <div id="transcript">（認識結果がここに表示されます）</div>
+  <div class="status info" id="micStatus">マイクボタンをタップして開始</div>
+  <div style="display:flex;gap:6px">
+    <button class="btn btn-gray btn-sm" onclick="T_stopMic()">停止</button>
+    <button class="btn btn-gray btn-sm" onclick="document.getElementById('transcript').textContent='（認識結果がここに表示されます）'">クリア</button>
+  </div>
+</div>
+
+<!-- ── STEP5: 読み上げテスト ── -->
+<div class="card">
+  <div class="card-title"><div class="step-num">5</div>読み上げテスト</div>
+  <textarea id="ttsInput" placeholder="読み上げるテキストを入力してください…">こんにちは。鳥取大学のFAQアシスタントです。音声の読み上げテストを行います。正常に聞こえていますか？</textarea>
+  <div class="status info" id="ttsStatus">テキストを入力して「読み上げ」ボタンを押してください。</div>
+  <div style="display:flex;gap:6px">
+    <button class="btn btn-green btn-sm" onclick="T_speak()">▶ 読み上げ</button>
+    <button class="btn btn-red btn-sm" onclick="T_stopSpeak()">⏹ 停止</button>
+  </div>
+  <div style="margin-top:10px">
+    <div style="font-size:11px;color:var(--text2);margin-bottom:6px">利用可能な音声：</div>
+    <select id="voiceSelect" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px;border-radius:6px;font-size:12px"></select>
+  </div>
+</div>
+
+<!-- ── STEP6: 連続テスト ── -->
+<div class="card">
+  <div class="card-title"><div class="step-num">6</div>連続テスト（認識→読み上げ）</div>
+  <div class="status info" id="continuousStatus">
+    マイクで音声認識した結果をそのまま読み上げます。
+  </div>
+  <button class="btn btn-blue" id="btnContinuous" onclick="T_toggleContinuous()">
+    ▶ 連続テスト開始
+  </button>
+</div>
+
+<!-- ── デバッグログ ── -->
+<div class="card">
+  <div class="card-title">
+    📋 デバッグログ
+    <button class="btn btn-gray btn-sm" onclick="T_clearLog()" style="margin-left:auto">クリア</button>
+  </div>
+  <div class="log-area" id="logArea"></div>
+</div>
+
+<script>
+// ================================================================
+// 状態管理
+// ================================================================
+let recognition    = null;
+let micIsOn        = false;
+let micIsSpeaking  = false;
+let isContinuous   = false;
+let ttsUnlocked    = false;
+let micPermGranted = false;
+
+// ================================================================
+// ログ
+// ================================================================
+function T_log(msg, type) {
+  const area = document.getElementById('logArea');
+  const div  = document.createElement('div');
+  div.className = 'log-line ' + (type||'');
+  const time = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  div.textContent = '[' + time + '] ' + msg;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+  console.log('[YOMIAGE]', msg);
+}
+function T_clearLog() { document.getElementById('logArea').innerHTML = ''; }
+
+// ================================================================
+// STEP1: 環境確認
+// ================================================================
+function T_checkEnv() {
+  const ua = navigator.userAgent;
+
+  // OS判定
+  let os = 'その他';
+  if (/iPhone|iPad|iPod/.test(ua)) os = 'iOS ' + (ua.match(/OS (\d+_\d+)/)||['','?'])[1].replace('_','.');
+  else if (/Android/.test(ua))     os = 'Android';
+  else if (/Mac/.test(ua))         os = 'macOS';
+  else if (/Win/.test(ua))         os = 'Windows';
+
+  // ブラウザ判定
+  let browser = 'その他';
+  if (/CriOS/.test(ua))            browser = 'iOS Chrome';
+  else if (/FxiOS/.test(ua))       browser = 'iOS Firefox';
+  else if (/Safari/.test(ua) && /iPhone|iPad/.test(ua)) browser = 'iOS Safari';
+  else if (/Chrome/.test(ua))      browser = 'Chrome';
+  else if (/Firefox/.test(ua))     browser = 'Firefox';
+  else if (/Safari/.test(ua))      browser = 'Safari';
+
+  document.getElementById('envBrowser').textContent = browser;
+  document.getElementById('envBrowser').className   = 'env-val';
+  document.getElementById('envOS').textContent      = os;
+  document.getElementById('envOS').className        = 'env-val';
+
+  // SpeechRecognition
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const srEl = document.getElementById('envSR');
+  srEl.textContent = SR ? '対応' : '非対応';
+  srEl.className   = 'env-val ' + (SR ? 'ok' : 'ng');
+
+  // speechSynthesis
+  const ttsEl = document.getElementById('envTTS');
+  ttsEl.textContent = window.speechSynthesis ? '対応' : '非対応';
+  ttsEl.className   = 'env-val ' + (window.speechSynthesis ? 'ok' : 'ng');
+
+  // getUserMedia
+  const micEl = document.getElementById('envMic');
+  const hasMic = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  micEl.textContent = hasMic ? '対応' : '非対応';
+  micEl.className   = 'env-val ' + (hasMic ? 'ok' : 'ng');
+
+  // HTTPS
+  const httpsEl = document.getElementById('envHTTPS');
+  const isHttps = location.protocol === 'https:' || location.hostname === 'localhost';
+  httpsEl.textContent = isHttps ? 'OK' : 'NG（必須）';
+  httpsEl.className   = 'env-val ' + (isHttps ? 'ok' : 'err');
+
+  T_log('環境確認: ' + browser + ' / ' + os + ' / SR:' + (SR?'○':'×') + ' TTS:' + (window.speechSynthesis?'○':'×'), 'info');
+
+  // iOS警告
+  if (/iPhone|iPad|iPod/.test(ua)) {
+    T_log('iOS検出: STEP3の読み上げアンロックを必ず実行してください', 'warn');
+  }
+}
+
+// ================================================================
+// STEP2: マイク許可申請
+// ================================================================
+function T_requestMicPermission() {
+  T_log('マイク許可申請中…', 'info');
+  document.getElementById('micPermStatus').className   = 'status info';
+  document.getElementById('micPermStatus').textContent = 'マイク許可を確認中…';
+
+  navigator.mediaDevices.getUserMedia({ audio:true, video:false })
+    .then(stream => {
+      // 取得したらすぐ停止（権限取得だけが目的）
+      stream.getTracks().forEach(t => t.stop());
+      micPermGranted = true;
+      document.getElementById('micPermStatus').className   = 'status ok';
+      document.getElementById('micPermStatus').textContent = '✅ マイクが許可されました。STEP4で音声認識をテストできます。';
+      document.getElementById('btnMicPerm').textContent    = '✅ 許可済み';
+      document.getElementById('btnMicPerm').disabled       = true;
+      T_log('マイク許可: 取得成功', 'ok');
+    })
+    .catch(err => {
+      document.getElementById('micPermStatus').className   = 'status err';
+      document.getElementById('micPermStatus').innerHTML   =
+        '❌ マイクが許可されませんでした。<br>エラー: ' + err.name + '<br>' +
+        'ブラウザのアドレスバー横のアイコンからマイクを許可してください。';
+      T_log('マイク許可エラー: ' + err.name + ' - ' + err.message, 'err');
+    });
+}
+
+// ================================================================
+// STEP3: TTSアンロック（iOS必須・タップコンテキスト内で実行）
+// ================================================================
+function T_unlockTTS() {
+  if (!window.speechSynthesis) {
+    T_log('speechSynthesis非対応', 'err');
+    return;
+  }
+
+  T_log('TTSアンロック実行中…', 'info');
+
+  try {
+    // 無音・ゼロ秒のUttで権限取得
+    const utt    = new SpeechSynthesisUtterance('');
+    utt.volume   = 0;
+    utt.lang     = 'ja-JP';
+    utt.rate     = 1.0;
+    utt.onstart  = () => T_log('TTSアンロック: onstart発火', 'ok');
+    utt.onend    = () => {
+      ttsUnlocked = true;
+      document.getElementById('ttsUnlockStatus').className   = 'status ok';
+      document.getElementById('ttsUnlockStatus').textContent = '✅ 読み上げがアンロックされました。STEP5で読み上げをテストできます。';
+      document.getElementById('btnTTSUnlock').textContent    = '✅ アンロック済み';
+      document.getElementById('btnTTSUnlock').disabled       = true;
+      T_log('TTSアンロック: 完了', 'ok');
+      T_populateVoices();
+    };
+    utt.onerror  = (e) => {
+      T_log('TTSアンロックエラー: ' + e.error, 'warn');
+      // エラーでも続行（一部iOSではエラーが出るが動作する場合あり）
+      ttsUnlocked = true;
+      T_populateVoices();
+    };
+    speechSynthesis.cancel(); // 念のためキャンセル
+    speechSynthesis.speak(utt);
+    T_log('TTSアンロック: speak()呼び出し完了', 'info');
+  } catch(e) {
+    T_log('TTSアンロック例外: ' + e.message, 'err');
+  }
+}
+
+// 音声リスト取得・セレクトボックス設定
+function T_populateVoices() {
+  const voices = speechSynthesis.getVoices();
+  T_log('利用可能音声数: ' + voices.length, 'info');
+
+  const sel = document.getElementById('voiceSelect');
+  sel.innerHTML = '';
+
+  const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+  const allVoices = [...jaVoices, ...voices.filter(v => !v.lang.startsWith('ja'))];
+
+  if (allVoices.length === 0) {
+    sel.innerHTML = '<option>音声が見つかりません</option>';
+    T_log('音声リスト: 0件（voiceschangedを待ちます）', 'warn');
+    return;
+  }
+
+  allVoices.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = v.name + ' (' + v.lang + ')' + (v.localService ? ' [ローカル]' : ' [リモート]');
+    if (v.lang === 'ja-JP') opt.selected = true;
+    sel.appendChild(opt);
+    T_log('音声: ' + v.name + ' / ' + v.lang + (v.localService?' [local]':''), 'info');
+  });
+}
+
+// ================================================================
+// STEP4: 音声認識
+// ================================================================
+function T_toggleMic() {
+  if (micIsOn) { T_stopMic(); return; }
+
+  // iOS対策: タップと同期的にアンロック（checkedの場合は毎回実行）
+  const useWorkaround = document.getElementById('iosWorkaround').checked;
+  if (useWorkaround) {
+    T_log('iOS対策: タップと同期的にTTSアンロック実行', 'info');
+    T_unlockTTS();
+  } else if (!ttsUnlocked) {
+    T_unlockTTS();
+  }
+
+  T_startMic();
+}
+
+function T_startMic() {
+  if (micIsOn) return;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    T_setMicStatus('❌ SpeechRecognition非対応ブラウザです', 'err');
+    T_log('音声認識: 非対応ブラウザ', 'err');
+    return;
+  }
+
+  T_log('音声認識: 開始試行', 'info');
+
+  navigator.mediaDevices.getUserMedia({ audio:true })
+    .then(() => {
+      recognition = new SR();
+      recognition.lang           = 'ja-JP';
+      recognition.continuous     = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 3;
+
+      recognition.onstart = () => {
+        micIsOn = true;
+        document.getElementById('micBtn').className = 'mic-btn listening';
+        T_setMicStatus('🔴 認識中… （話しかけてください）', 'info');
+        document.getElementById('transcript').textContent = '…';
+        T_log('音声認識: onstart', 'ok');
+      };
+
+      recognition.onresult = async (e) => {
+        const results = Array.from(e.results);
+        const interim = results.filter(r => !r.isFinal).map(r => r[0].transcript).join('');
+        const finals  = results.filter(r => r.isFinal);
+
+        if (interim) document.getElementById('transcript').textContent = interim;
+
+        if (finals.length > 0) {
+          const text = finals.map(r => r[0].transcript).join('').trim();
+          document.getElementById('transcript').textContent = '「' + text + '」';
+          T_log('音声認識: 確定「' + text + '」', 'ok');
+          T_setMicStatus('✅ 認識完了: 「' + text + '」', 'ok');
+
+          // 連続テストの場合は読み上げ（awaitで待機・micvoice.html成功パターン）
+          if (isContinuous) {
+            document.getElementById('ttsInput').value = text;
+            await new Promise(resolve => setTimeout(resolve, 300));
+            T_speak();
+          }
+        }
+      };
+
+      recognition.onend = () => {
+        micIsOn = false;
+        document.getElementById('micBtn').className = 'mic-btn';
+        T_log('音声認識: onend (isSpeaking=' + micIsSpeaking + ' isContinuous=' + isContinuous + ')', 'info');
+
+        if (micIsSpeaking) {
+          T_setMicStatus('読み上げ中… 完了後に再起動します', 'info');
+          return;
+        }
+        if (isContinuous) {
+          T_setMicStatus('待機中… 次の発話を待っています', 'info');
+          setTimeout(T_startMic, 400);
+        } else {
+          T_setMicStatus('マイクボタンをタップして再開', 'info');
+        }
+      };
+
+      recognition.onerror = (e) => {
+        micIsOn = false;
+        document.getElementById('micBtn').className = 'mic-btn';
+        T_log('音声認識エラー: ' + e.error, 'err');
+
+        if (e.error === 'aborted' || e.error === 'no-speech') {
+          T_log('音声認識: ' + e.error + ' → ' + (isContinuous ? '再起動' : '停止'), 'warn');
+          if (isContinuous && !micIsSpeaking) setTimeout(T_startMic, 400);
+          return;
+        }
+        T_setMicStatus('❌ エラー: ' + e.error, 'err');
+      };
+
+      recognition.start();
+    })
+    .catch(err => {
+      T_setMicStatus('❌ マイクアクセスエラー: ' + err.name, 'err');
+      T_log('マイクアクセスエラー: ' + err.name, 'err');
+    });
+}
+
+function T_stopMic() {
+  if (recognition) try { recognition.stop(); } catch(e) {}
+  micIsOn = false;
+  document.getElementById('micBtn').className = 'mic-btn';
+  T_setMicStatus('停止しました', 'info');
+  T_log('音声認識: 手動停止', 'info');
+}
+
+function T_setMicStatus(msg, cls) {
+  const el = document.getElementById('micStatus');
+  el.textContent = msg;
+  el.className   = 'status ' + (cls||'info');
+}
+
+// ================================================================
+// STEP5: 読み上げ
+// ================================================================
+async function T_speak() {
+  const text = document.getElementById('ttsInput').value.trim();
+  if (!text) { T_log('読み上げ: テキストが空', 'warn'); return; }
+  if (!window.speechSynthesis) { T_log('speechSynthesis非対応', 'err'); return; }
+
+  T_log('読み上げ開始: 「' + text.slice(0,30) + '…」', 'info');
+
+  // 既に再生中なら停止
+  if (speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+    T_log('読み上げ: 既存をキャンセル', 'warn');
+  }
+
+  micIsSpeaking = true;
+  if (recognition) try { recognition.abort(); } catch(e) {}
+  document.getElementById('micBtn').className = 'mic-btn speaking';
+  document.getElementById('ttsStatus').textContent = '読み上げ中…';
+  document.getElementById('ttsStatus').className   = 'status info';
+
+  // 選択された音声を取得
+  const sel    = document.getElementById('voiceSelect');
+  const voices = speechSynthesis.getVoices();
+  const jaVoices = voices.filter(v => v.lang.startsWith('ja'));
+  const allVoices = [...jaVoices, ...voices.filter(v => !v.lang.startsWith('ja'))];
+  const selectedVoice = allVoices[sel.selectedIndex] || null;
+
+  if (selectedVoice) T_log('使用音声: ' + selectedVoice.name, 'info');
+  else T_log('音声: デフォルト（選択なし）', 'warn');
+
+  // 句読点で分割
+  const segments = text.split(/(?<=[。、！？!?\n])/).map(s => s.trim()).filter(s => s.length > 0);
+  T_log('セグメント数: ' + segments.length, 'info');
+
+  // micvoice.html成功パターン: awaitで待機（setTimeoutより安定）
+  await new Promise(resolve => setTimeout(resolve, 700));
+  T_speakSegments(segments, selectedVoice, 0);
+}
+
+function T_speakSegments(segments, voice, idx) {
+  if (!micIsSpeaking || idx >= segments.length) {
+    T_onSpeakEnd();
+    return;
+  }
+
+  const utt   = new SpeechSynthesisUtterance(segments[idx]);
+  utt.lang    = 'ja-JP';
+  utt.rate    = 1.0;
+  utt.pitch   = 1.0;
+  utt.volume  = 1.0;
+  if (voice) utt.voice = voice;
+
+  let keepAlive = null;
+
+  const cleanup = () => {
+    if (keepAlive) { clearInterval(keepAlive); keepAlive = null; }
+  };
+
+  utt.onstart = () => {
+    T_log('セグメント' + (idx+1) + '/' + segments.length + ': 開始「' + segments[idx].slice(0,20) + '」', 'ok');
+    // iOS長文対策: 10秒ごとにpause/resume
+    keepAlive = setInterval(() => {
+      if (!speechSynthesis.speaking) { cleanup(); return; }
+      speechSynthesis.pause();
+      speechSynthesis.resume();
+      T_log('iOS keepAlive: pause/resume', 'info');
+    }, 10000);
+  };
+
+  utt.onend = () => {
+    cleanup();
+    T_log('セグメント' + (idx+1) + ': 完了', 'ok');
+    // 次のセグメントへ（150ms待機）
+    setTimeout(() => T_speakSegments(segments, voice, idx+1), 150);
+  };
+
+  utt.onerror = (e) => {
+    cleanup();
+    T_log('セグメント' + (idx+1) + ' エラー: ' + e.error, 'err');
+    if (e.error !== 'interrupted') {
+      setTimeout(() => T_speakSegments(segments, voice, idx+1), 150);
+    } else {
+      T_onSpeakEnd();
+    }
+  };
+
+  speechSynthesis.speak(utt);
+  T_log('セグメント' + (idx+1) + ': speak()呼び出し', 'info');
+}
+
+function T_onSpeakEnd() {
+  micIsSpeaking = false;
+  document.getElementById('micBtn').className = 'mic-btn';
+  document.getElementById('ttsStatus').textContent = '読み上げ完了';
+  document.getElementById('ttsStatus').className   = 'status ok';
+  T_log('読み上げ: 全セグメント完了', 'ok');
+
+  // 連続テストの場合はマイク再起動（200ms後）
+  if (isContinuous) {
+    T_log('連続テスト: マイク再起動（200ms後）', 'info');
+    setTimeout(T_startMic, 200);
+  }
+}
+
+function T_stopSpeak() {
+  speechSynthesis.cancel();
+  micIsSpeaking = false;
+  document.getElementById('micBtn').className = 'mic-btn';
+  document.getElementById('ttsStatus').textContent = '停止しました';
+  document.getElementById('ttsStatus').className   = 'status warn';
+  T_log('読み上げ: 手動停止', 'warn');
+}
+
+// ================================================================
+// STEP6: 連続テスト
+// ================================================================
+function T_toggleContinuous() {
+  if (isContinuous) {
+    isContinuous = false;
+    T_stopMic();
+    T_stopSpeak();
+    document.getElementById('btnContinuous').textContent = '▶ 連続テスト開始';
+    document.getElementById('continuousStatus').textContent = '連続テストを停止しました。';
+    document.getElementById('continuousStatus').className   = 'status info';
+    T_log('連続テスト: 停止', 'warn');
+  } else {
+    if (!ttsUnlocked) {
+      T_unlockTTS();
+      setTimeout(T_startContinuous, 500);
+    } else {
+      T_startContinuous();
+    }
+  }
+}
+
+function T_startContinuous() {
+  isContinuous = true;
+  document.getElementById('btnContinuous').textContent = '⏹ 連続テスト停止';
+  document.getElementById('continuousStatus').textContent = '🔴 連続テスト中… 話しかけると読み上げます';
+  document.getElementById('continuousStatus').className   = 'status ok';
+  T_log('連続テスト: 開始', 'ok');
+  T_startMic();
+}
+
+// ================================================================
+// voiceschanged
+// ================================================================
+if (window.speechSynthesis) {
+  speechSynthesis.onvoiceschanged = () => {
+    T_log('voiceschanged: 音声リスト更新', 'info');
+    T_populateVoices();
+  };
+}
+
+// ================================================================
+// 初期化
+// ================================================================
+window.addEventListener('load', () => {
+  T_log('ページ読み込み完了', 'info');
+  T_checkEnv();
+  T_populateVoices();
+
+  // iOS以外は自動でTTSアンロック済みとみなす
+  const ua = navigator.userAgent;
+  if (!/iPhone|iPad|iPod/.test(ua)) {
+    ttsUnlocked = true;
+    document.getElementById('ttsUnlockStatus').className   = 'status ok';
+    document.getElementById('ttsUnlockStatus').textContent = '✅ iOS以外のブラウザではアンロック不要です。';
+    document.getElementById('btnTTSUnlock').disabled       = true;
+    T_log('非iOS: TTSアンロックスキップ', 'ok');
+  }
+});
+</script>
+</body>
+</html>
