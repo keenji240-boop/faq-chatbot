@@ -47,6 +47,20 @@ textarea{resize:vertical;min-height:80px}
 .badge-general{background:var(--surface3);color:var(--text2);border:1px solid var(--border2)}
 .mask-email{font-size:10px;color:var(--text2)}
 .topbar-right{display:flex;gap:6px;align-items:center}
+#modeBar{
+  display:none;
+  background:rgba(200,146,42,.12);border:1px solid rgba(200,146,42,.3);
+  border-radius:6px;padding:3px 10px;
+  font-size:11px;color:var(--amber);
+  align-items:center;gap:6px;
+}
+#modeBar.active{display:flex}
+#modeBarLabel{font-weight:bold}
+#modeBarExit{
+  background:none;border:none;color:var(--amber);
+  cursor:pointer;font-size:12px;padding:0 0 0 4px;opacity:.7;
+}
+#modeBarExit:hover{opacity:1}
 #logoutBtn{padding:4px 10px;border-radius:6px;font-size:11px;background:transparent;color:var(--text2);border:1px solid var(--border2)}
 
 /* ── PC 2カラム（1320px超） ── */
@@ -106,6 +120,14 @@ textarea{resize:vertical;min-height:80px}
 /* URLリンク・電話番号 */
 .msg-links{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .msg-link-btn{padding:4px 10px;border-radius:6px;font-size:11px;background:var(--surface2);border:1px solid var(--border2);color:var(--accent);cursor:pointer;text-decoration:none;display:inline-block}
+.msg-mail-btn{
+  display:inline-flex;align-items:center;
+  background:rgba(74,154,74,.15);color:var(--green);
+  border:1px solid rgba(74,154,74,.3);
+  border-radius:6px;padding:4px 10px;font-size:12px;
+  text-decoration:none;margin:2px 4px 2px 0;
+  word-break:break-all;
+}
 .msg-tel-btn{padding:4px 10px;border-radius:6px;font-size:11px;background:var(--surface2);border:1px solid var(--border2);color:var(--green);cursor:pointer;text-decoration:none;display:inline-block}
 
 /* ── ボタン ── */
@@ -290,6 +312,11 @@ textarea{resize:vertical;min-height:80px}
     <div class="topbar-left">
       <span class="role-badge" id="roleBadge">読込中</span>
       <span class="mask-email" id="maskEmail"></span>
+      <div id="modeBar">
+        <span>🔧</span>
+        <span id="modeBarLabel">モード</span>
+        <button id="modeBarExit" onclick="C_exitMode()" title="終了">✕</button>
+      </div>
     </div>
     <div class="topbar-right">
       <button class="btn btn-ghost btn-sm" id="micPopupBtn" onclick="C_openMicPopup()" style="display:none">🎙 音声</button>
@@ -656,34 +683,35 @@ function C_addMsg(type, text, isLoading) {
   return row;
 }
 
-// URL・電話番号を抽出して別途表示
-function C_addBotMsgWithExtras(text, urls) {
-  // answerからURL・電話番号を抽出
-  const urlRegex = /https?:\/\/[^\s　、。）\]）]+/g;
-  const telRegex = /(?:tel:|電話[:：]?\s*)?(0\d{1,4}[-－]\d{1,4}[-－]\d{4})/g;
+// URL・電話番号・メールアドレスを別途表示
+function C_addBotMsgWithExtras(text, urls, phones, emails) {
+  // answerから残存するURL・電話番号・メールを除去してクリーンなテキストに
+  const urlRegex   = /https?:\/\/[^\s　、。）\]）]+/g;
+  const telRegex   = /0\d{1,4}[-－]\d{1,4}[-－]\d{4}/g;
+  const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
 
-  const extractedUrls = [...(text.match(urlRegex) || [])];
-  const extractedTels = [...(text.match(telRegex) || [])].map(t => t.replace(/[tel:電話：\s]/g,''));
-
-  // answerからURL・電話番号を除去してクリーンなテキストに
   const cleanText = text
-    .replace(urlRegex, '')
-    .replace(telRegex, '')
+    .replace(urlRegex,   '')
+    .replace(telRegex,   '')
+    .replace(emailRegex, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   const row    = C_addMsg('bot', cleanText);
   const bubble = row.querySelector('.msg-bubble');
 
-  // URLリンク＋電話番号リンクを表示
+  // URL・電話・メールをグループ別に表示
   const allLinks = [
-    ...( urls || []).map(u => ({ type:'url', label:u.label, href:u.url })),
-    ...extractedUrls.map(u => ({ type:'url', label:u.replace(/https?:\/\//, '').slice(0,40), href:u })),
-    ...extractedTels.map(t => ({ type:'tel', label:'📞 ' + t, href:'tel:' + t }))
+    // AI②が返したurls[]
+    ...(urls || []).map(u => ({ type:'url', label: u.label || u.url.replace(/https?:\/\//,'').slice(0,40), href: u.url })),
+    // AI②が返したphones[]
+    ...(phones || []).map(p => ({ type:'tel', label: (p.label ? p.label + ' ' : '') + p.number, href: 'tel:' + p.number.replace(/[-－\s]/g,'') })),
+    // AI②が返したemails[]
+    ...(emails || []).map(m => ({ type:'mail', label: (m.label ? m.label + ' ' : '') + m.address, href: 'mailto:' + m.address }))
   ];
 
   // 重複除去
-  const seen = new Set();
+  const seen   = new Set();
   const unique = allLinks.filter(l => { if (seen.has(l.href)) return false; seen.add(l.href); return true; });
 
   if (unique.length) {
@@ -691,8 +719,9 @@ function C_addBotMsgWithExtras(text, urls) {
     linkDiv.className = 'msg-links';
     unique.forEach(l => {
       const a = document.createElement('a');
-      a.className = l.type === 'tel' ? 'msg-tel-btn' : 'msg-link-btn';
-      a.textContent = l.type === 'url' ? '📎 ' + l.label : l.label;
+      if      (l.type === 'tel')  { a.className = 'msg-tel-btn';  a.textContent = '📞 ' + l.label; }
+      else if (l.type === 'mail') { a.className = 'msg-mail-btn'; a.textContent = '✉️ ' + l.label; }
+      else                        { a.className = 'msg-link-btn'; a.textContent = '📎 ' + l.label; }
       a.href = l.href;
       if (l.type === 'url') a.target = '_blank';
       linkDiv.appendChild(a);
@@ -710,8 +739,24 @@ function C_sendMessage() {
   const el   = isPC ? document.getElementById('inputTextPC') : document.getElementById('inputText');
   const text = el.value.trim();
   if (!text) { C_addMsg('error', '質問を入力してください。'); return; }
-  el.value = ''; el.style.height = 'auto';
 
+  // ── コマンドモード中はFAQ送信をブロック ──
+  if (currentMode) {
+    const detected = C_detectCommand(text);
+    if (!detected) {
+      el.value = ''; el.style.height = 'auto';
+      const modeLabel = {
+        unresolved_view:'未解決参照', unresolved_answer:'未解決回答',
+        resolved_view:'回答済参照', faq_view:'FAQ確認',
+        faq_add:'FAQ追加', faq_edit:'FAQ編集', logs:'ログ'
+      }[currentMode] || currentMode;
+      C_addMsg('system', '現在「' + modeLabel + '」モード中です。「終了」と言うと通常モードに戻ります。');
+      C_speakViaModal(modeLabel + 'モード中です。終了と言うと戻ります。');
+    }
+    return;
+  }
+
+  el.value = ''; el.style.height = 'auto';
   C_addMsg('user', text);
   const loadRow = C_addMsg('loading', '', true);
 
@@ -721,7 +766,7 @@ function C_sendMessage() {
       if (!res.success) { C_addMsg('error', res.message || 'エラーが発生しました。'); return; }
       switch(res.type) {
         case 'faq':
-          C_addBotMsgWithExtras(res.answer, res.urls);
+          C_addBotMsgWithExtras(res.answer, res.urls, res.phones, res.emails);
           C_speakViaModal(res.answer + (res.urls && res.urls.length ? '　画面のリンク先を確認してください。' : ''));
           lastBotMsg = res.answer;
           break;
@@ -1448,6 +1493,16 @@ function C_micDecline(btn) {
 // ── モード管理 ──
 function C_setMode(modeName) {
   currentMode = modeName;
+  const modeLabels = {
+    unresolved_view:'未解決参照', unresolved_answer:'未解決回答',
+    resolved_view:'回答済参照', faq_view:'FAQ確認',
+    faq_add:'FAQ追加', faq_edit:'FAQ編集', logs:'ログ'
+  };
+  const bar = document.getElementById('modeBar');
+  if (bar) {
+    document.getElementById('modeBarLabel').textContent = modeLabels[modeName] || modeName;
+    bar.classList.add('active');
+  }
   modeContext = { selectedIndex:-1, items:[], selectedItem:null };
   const label = MODE_LABELS[modeName] || modeName;
   C_setVoiceStatus('listen');
@@ -1458,6 +1513,8 @@ function C_setMode(modeName) {
 
 function C_exitMode() {
   currentMode = null;
+  const bar = document.getElementById('modeBar');
+  if (bar) bar.classList.remove('active');
   modeContext = {};
   C_setVoiceStatus('listen');
   document.getElementById('vsLabel').textContent = 'リスニング中';
