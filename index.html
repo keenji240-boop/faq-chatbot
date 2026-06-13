@@ -904,8 +904,7 @@ function C_unlockTTS(force = false) {
       source.start(0);
     }
 
-    // 2. SpeechSynthesis のアンロック
-    speechSynthesis.cancel();
+    // 2. SpeechSynthesis のアンロック (cancelは呼ばず直接無音を再生してセッションを開始)
     const utt = new SpeechSynthesisUtterance('');
     utt.volume = 0;
     utt.lang = 'ja-JP';
@@ -922,21 +921,29 @@ function C_unlockTTS(force = false) {
 function C_speakViaModal(text) {
   if (!text || !window.speechSynthesis) return;
 
-  // iOS対策: 音声エンジンが詰まるのを防ぐためキューをクリアする
-  try { speechSynthesis.cancel(); } catch(e) {}
-
   const ttsText = C_convertForTTS(text);
 
   micIsSpeaking = true;
   isSpeaking    = true;
 
-  // iOS対策: 音声認識が動いていた場合のみ、認識停止→TTS開始の切り替えウェイトを入れる
+  // iOS対策: すでに別の音声が再生中の場合のみキャンセルし、解放までのウェイト(150ms)を入れる
+  // (再生中でないときにcancelを呼ぶと、直後のspeakがSafariで無視されるバグを防止します)
+  let cancelDelay = 0;
+  if (speechSynthesis.speaking) {
+    try { speechSynthesis.cancel(); } catch(e) {}
+    cancelDelay = 150;
+  }
+
+  // iOS対策: 音声認識が動いていた場合のみ、認識停止→TTS開始の切り替えウェイト(700ms)を入れる
   let delay = 0;
   if (micRecognition && micIsOn) {
     try { micRecognition.abort(); } catch(ex) {}
     micIsOn = false;
-    delay = 700; // 認識から再生への切り替えディレイ
+    delay = 700;
   }
+
+  // 最大のウェイト時間を適用
+  delay = Math.max(delay, cancelDelay);
 
   document.getElementById('micModalBtn').className = 'speaking';
   C_setMicModalStatus('読み上げ中…');
