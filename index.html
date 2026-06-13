@@ -863,20 +863,41 @@ function C_setMicModalStatus(text) {
 }
 
 // iOS対策: TTSアンロック（ユーザー操作コンテキスト内で無音発話）
+// キュー方式: 無音Uttのonend内でpendingTextがあれば読み上げる
+let _ttsPendingText = null;
+let _ttsPendingResolve = null;
+
 function C_unlockTTS() {
-  if (window._ttsUnlocked) return;
   if (!window.speechSynthesis) return;
   try {
+    if (speechSynthesis.speaking) speechSynthesis.cancel();
     const utt    = new SpeechSynthesisUtterance('');
     utt.volume   = 0;
     utt.lang     = 'ja-JP';
-    utt.onend    = () => {};
-    utt.onerror  = () => {};
+    utt.onend    = () => {
+      window._ttsUnlocked = true;
+      console.log('[TTS] iOS unlock完了');
+      // pendingがあれば即座に読み上げ開始
+      if (_ttsPendingResolve) {
+        const resolve = _ttsPendingResolve;
+        _ttsPendingResolve = null;
+        resolve();
+      }
+    };
+    utt.onerror  = (e) => {
+      window._ttsUnlocked = true;
+      console.log('[TTS] unlock onerror（継続）:', e.error);
+      if (_ttsPendingResolve) {
+        const resolve = _ttsPendingResolve;
+        _ttsPendingResolve = null;
+        resolve();
+      }
+    };
     speechSynthesis.speak(utt);
-    window._ttsUnlocked = true;
-    console.log('[TTS] iOS unlock完了');
+    console.log('[TTS] iOS unlock speak()発行');
   } catch(e) {
     console.log('[TTS] unlock失敗:', e);
+    window._ttsUnlocked = true;
   }
 }
 
@@ -894,9 +915,25 @@ async function C_speakViaModal(text) {
 
   const segments = ttsText.split(/(?<=[。、！？!?])/).map(s => s.trim()).filter(s => s.length > 0);
 
-  // iOS対策: awaitで700ms待機（setTimeoutより安定・micvoice.html成功パターン）
-  if (speechSynthesis.paused) speechSynthesis.resume();
-  await new Promise(resolve => setTimeout(resolve, 700));
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+  if (isIOS) {
+    // iOS: unlockTTSのonend完了を待ってから読み上げ（キュー方式）
+    if (!window._ttsUnlocked) {
+      // まだunlock完了していなければ完了を待つ
+      await new Promise(resolve => { _ttsPendingResolve = resolve; });
+    } else {
+      // 既にunlock済みでも再度unlock（マイクタップ→fetch完了の間にコンテキストが切れるため）
+      await new Promise(resolve => {
+        _ttsPendingResolve = resolve;
+        C_unlockTTS();
+      });
+    }
+  } else {
+    // 非iOS: 従来通り700ms待機
+    if (speechSynthesis.paused) speechSynthesis.resume();
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
 
   // voices未読み込みなら待機
   const voices = speechSynthesis.getVoices();
