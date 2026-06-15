@@ -507,17 +507,8 @@ function C_proceedLogin(email) {
 //  ページロード
 // ============================================================
 window.addEventListener('load', () => {
-  // CSSアニメランダム選択（BgAnimations.htmlのBG_ANIM_CLASSを使用）
-  const animHeaderEl = document.getElementById('animHeader');
-  if (window.BG_ANIM_CLASS) {
-    animHeaderEl.classList.add(window.BG_ANIM_CLASS);
-    // Canvas系アニメは別途初期化
-    if (window.BG_ANIM_CLASS === 'anim-matrix' && window.C_initMatrixAnim) {
-      C_initMatrixAnim(animHeaderEl);
-    } else if (window.BG_ANIM_CLASS === 'anim-matrix-rain' && window.C_initMatrixRainAnim) {
-      C_initMatrixRainAnim(animHeaderEl);
-    }
-  }
+  // アニメをランダム選択して動的ロード
+  C_loadRandomAnim();
   // mascotWrapにSVGアイコンを設定
   const mascotEl = document.getElementById('mascotSvgWrap');
   if (mascotEl && window.C_getBotIconSVG) {
@@ -540,14 +531,31 @@ window.addEventListener('load', () => {
   }
 });
 
+// ── ランダムアニメ動的ロード ──
+const C_ANIM_FILES = [
+  'animations/anim001_matrix_green.js',
+  'animations/anim002_matrix_gold.js',
+  'animations/anim003_magic_circle.js',
+  'animations/anim004_eye_of_sauron.js',
+  'animations/anim005_mandala.js',
+  'animations/anim006_cpu_circuit.js',
+  'animations/anim007_guruguru.js',
+  'animations/anim008_circle_rotation.js',
+  'animations/anim009_machine_god.js',
+];
+function C_loadRandomAnim() {
+  const src  = C_ANIM_FILES[Math.floor(Math.random() * C_ANIM_FILES.length)];
+  const scr  = document.createElement('script');
+  scr.src    = src;
+  scr.onload = function() {
+    const el = document.getElementById('animHeader');
+    if (el && typeof initAnim === 'function') initAnim(el);
+  };
+  document.head.appendChild(scr);
+}
+
 // アニメ・マスコット初期化
 function C_initAnimations() {
-  const animHeaderEl = document.getElementById('animHeader');
-  if (window.BG_ANIM_CLASS) {
-    animHeaderEl.classList.add(window.BG_ANIM_CLASS);
-    if (window.BG_ANIM_CLASS === 'anim-matrix' && window.C_initMatrixAnim) C_initMatrixAnim(animHeaderEl);
-    else if (window.BG_ANIM_CLASS === 'anim-matrix-rain' && window.C_initMatrixRainAnim) C_initMatrixRainAnim(animHeaderEl);
-  }
   const mascotEl = document.getElementById('mascotSvgWrap');
   if (mascotEl && window.C_getBotIconSVG) {
     mascotEl.innerHTML = window.C_getBotIconSVG();
