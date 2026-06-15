@@ -507,15 +507,6 @@ function C_proceedLogin(email) {
 //  ページロード
 // ============================================================
 window.addEventListener('load', () => {
-  // アニメをランダム選択して動的ロード
-  C_loadRandomAnim();
-  // mascotWrapにSVGアイコンを設定
-  const mascotEl = document.getElementById('mascotSvgWrap');
-  if (mascotEl && window.C_getBotIconSVG) {
-    mascotEl.innerHTML = window.C_getBotIconSVG();
-    const svgEl = mascotEl.querySelector('svg');
-    if (svgEl) { svgEl.setAttribute('width','56'); svgEl.setAttribute('height','56'); }
-  }
   C_adjustLayout();
   window.addEventListener('resize', C_adjustLayout);
 
@@ -554,14 +545,20 @@ function C_loadRandomAnim() {
   document.head.appendChild(scr);
 }
 
-// アニメ・マスコット初期化
+// アニメ・マスコット初期化（二重実行防止）
+let _animInited = false;
 function C_initAnimations() {
+  // マスコットSVG設定
   const mascotEl = document.getElementById('mascotSvgWrap');
   if (mascotEl && window.C_getBotIconSVG) {
     mascotEl.innerHTML = window.C_getBotIconSVG();
     const svgEl = mascotEl.querySelector('svg');
     if (svgEl) { svgEl.setAttribute('width','56'); svgEl.setAttribute('height','56'); }
   }
+  // アニメは一度だけ起動
+  if (_animInited) return;
+  _animInited = true;
+  C_loadRandomAnim();
 }
 
 // アプリ初期化（ログイン後）
