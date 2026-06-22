@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56">
+  <defs>
+    <radialGradient id="b6bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1a0505"/>
+      <stop offset="100%" stop-color="#080101"/>
+    </radialGradient>
+    <filter id="b6glow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="28" cy="28" r="27" fill="url(#b6bg)" stroke="#cc2200" stroke-width="1.2"/>
+  <!-- 角 -->
+  <path d="M20 16 L15 6 L22 13" fill="#8a1500" stroke="#cc2200" stroke-width="0.8"/>
+  <path d="M36 16 L41 6 L34 13" fill="#8a1500" stroke="#cc2200" stroke-width="0.8"/>
+  <!-- 頭 -->
+  <ellipse cx="28" cy="26" rx="14" ry="13" fill="#1a0a08" stroke="#cc2200" stroke-width="1.2"/>
+  <!-- うろこ模様 -->
+  <path d="M16 22 Q20 18 24 22" stroke="#cc2200" stroke-width="0.6" fill="none" opacity="0.6"/>
+  <path d="M32 22 Q36 18 40 22" stroke="#cc2200" stroke-width="0.6" fill="none" opacity="0.6"/>
+  <path d="M20 28 Q24 24 28 28 Q32 24 36 28" stroke="#cc2200" stroke-width="0.6" fill="none" opacity="0.6"/>
+  <!-- 目 -->
+  <ellipse cx="22" cy="24" rx="4" ry="4.5" fill="#0a0200" stroke="#ff4400" stroke-width="1"/>
+  <ellipse cx="34" cy="24" rx="4" ry="4.5" fill="#0a0200" stroke="#ff4400" stroke-width="1"/>
+  <ellipse cx="22" cy="24" rx="1.5" ry="3.5" fill="#ff4400" filter="url(#b6glow)"/>
+  <ellipse cx="34" cy="24" rx="1.5" ry="3.5" fill="#ff4400" filter="url(#b6glow)"/>
+  <circle cx="22.5" cy="22.5" r="0.7" fill="#ffaa00" opacity="0.9"/>
+  <circle cx="34.5" cy="22.5" r="0.7" fill="#ffaa00" opacity="0.9"/>
+  <!-- 鼻 -->
+  <ellipse cx="26" cy="30" rx="1.2" ry="0.8" fill="#cc2200" opacity="0.8"/>
+  <ellipse cx="30" cy="30" rx="1.2" ry="0.8" fill="#cc2200" opacity="0.8"/>
+  <!-- 口・牙 -->
+  <path d="M20 33 Q28 37 36 33" stroke="#cc2200" stroke-width="1" fill="none"/>
+  <line x1="24" y1="33" x2="23" y2="37" stroke="#e0e0e0" stroke-width="1.2" stroke-linecap="round"/>
+  <line x1="32" y1="33" x2="33" y2="37" stroke="#e0e0e0" stroke-width="1.2" stroke-linecap="round"/>
+  <!-- 首うろこ -->
+  <path d="M22 38 Q28 42 34 38" stroke="#cc2200" stroke-width="0.8" fill="none"/>
+  <path d="M24 41 Q28 45 32 41" stroke="#8a1500" stroke-width="0.7" fill="none"/>
+</svg>

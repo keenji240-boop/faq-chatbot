@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56">
+  <defs>
+    <radialGradient id="u2bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#050a1a"/>
+      <stop offset="100%" stop-color="#020408"/>
+    </radialGradient>
+    <filter id="u2glow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="28" cy="28" r="27" fill="url(#u2bg)" stroke="#aaccff" stroke-width="1.2"/>
+  <!-- 星 -->
+  <circle cx="10" cy="12" r="0.8" fill="#fff" opacity="0.6"/>
+  <circle cx="44" cy="10" r="0.6" fill="#fff" opacity="0.5"/>
+  <circle cx="8" cy="38" r="0.7" fill="#fff" opacity="0.5"/>
+  <circle cx="48" cy="40" r="0.8" fill="#fff" opacity="0.6"/>
+  <!-- ヘルメット -->
+  <ellipse cx="28" cy="24" rx="14" ry="15" fill="#1a2030" stroke="#aaccff" stroke-width="1.5"/>
+  <!-- バイザー -->
+  <ellipse cx="28" cy="24" rx="10" ry="11" fill="#0a1828" stroke="#5599ff" stroke-width="1" filter="url(#u2glow)"/>
+  <!-- 顔（バイザー越し） -->
+  <ellipse cx="28" cy="24" rx="7" ry="8" fill="#0d1f38"/>
+  <ellipse cx="23" cy="22" rx="2.5" ry="2.5" fill="#3377ff" opacity="0.8"/>
+  <ellipse cx="33" cy="22" rx="2.5" ry="2.5" fill="#3377ff" opacity="0.8"/>
+  <circle cx="23" cy="22" r="1" fill="#aaccff"/>
+  <circle cx="33" cy="22" r="1" fill="#aaccff"/>
+  <path d="M23 28 Q28 31 33 28" stroke="#5599ff" stroke-width="1" fill="none"/>
+  <!-- スーツ首元 -->
+  <rect x="20" y="37" width="16" height="5" rx="3" fill="#1a2030" stroke="#aaccff" stroke-width="1"/>
+  <!-- 胴体スーツ -->
+  <rect x="16" y="41" width="24" height="9" rx="4" fill="#1a2030" stroke="#aaccff" stroke-width="1"/>
+  <!-- NASAっぽいバッジ -->
+  <circle cx="28" cy="46" r="3" fill="#0a1828" stroke="#5599ff" stroke-width="0.8"/>
+  <circle cx="28" cy="46" r="1.5" fill="#3377ff" opacity="0.8"/>
+</svg>

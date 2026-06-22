@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56">
+  <defs>
+    <radialGradient id="u5bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0e0a04"/>
+      <stop offset="100%" stop-color="#050300"/>
+    </radialGradient>
+    <filter id="u5glow">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="28" cy="28" r="27" fill="url(#u5bg)" stroke="#c8a020" stroke-width="1.2"/>
+  <!-- 兜 -->
+  <ellipse cx="28" cy="18" rx="13" ry="10" fill="#1a1408" stroke="#c8a020" stroke-width="1.2"/>
+  <!-- 兜の前立て -->
+  <path d="M28 8 L24 14 L32 14 Z" fill="#8a0000" stroke="#c8a020" stroke-width="0.8"/>
+  <line x1="28" y1="8" x2="28" y2="4" stroke="#c8a020" stroke-width="1.5"/>
+  <circle cx="28" cy="4" r="2" fill="#c8a020" filter="url(#u5glow)"/>
+  <!-- 兜の吹き返し -->
+  <path d="M15 14 Q10 18 13 24" fill="#1a1408" stroke="#c8a020" stroke-width="0.9"/>
+  <path d="M41 14 Q46 18 43 24" fill="#1a1408" stroke="#c8a020" stroke-width="0.9"/>
+  <!-- 顔 -->
+  <ellipse cx="28" cy="27" rx="11" ry="12" fill="#1c100a" stroke="#c8a020" stroke-width="1"/>
+  <!-- 目 -->
+  <ellipse cx="23" cy="25" rx="3.5" ry="2.5" fill="#080400" stroke="#c8a020" stroke-width="0.8"/>
+  <ellipse cx="33" cy="25" rx="3.5" ry="2.5" fill="#080400" stroke="#c8a020" stroke-width="0.8"/>
+  <ellipse cx="23" cy="25" rx="2" ry="1.5" fill="#c8a020" filter="url(#u5glow)"/>
+  <ellipse cx="33" cy="25" rx="2" ry="1.5" fill="#c8a020" filter="url(#u5glow)"/>
+  <circle cx="23.6" cy="24.4" r="0.7" fill="#fff" opacity="0.7"/>
+  <circle cx="33.6" cy="24.4" r="0.7" fill="#fff" opacity="0.7"/>
+  <!-- 面頬（下半分マスク） -->
+  <path d="M17 28 Q28 34 39 28 L39 36 Q28 42 17 36 Z" fill="#140c06" stroke="#c8a020" stroke-width="0.9"/>
+  <!-- 面頬の模様 -->
+  <path d="M20 31 Q28 34 36 31" stroke="#8a6010" stroke-width="0.7" fill="none" opacity="0.7"/>
+  <path d="M22 34 Q28 37 34 34" stroke="#8a6010" stroke-width="0.7" fill="none" opacity="0.7"/>
+  <!-- 胴体（鎧） -->
+  <rect x="17" y="38" width="22" height="10" rx="3" fill="#120e04" stroke="#c8a020" stroke-width="1"/>
+  <!-- 鎧の横縞 -->
+  <line x1="17" y1="41" x2="39" y2="41" stroke="#c8a020" stroke-width="0.6" opacity="0.5"/>
+  <line x1="17" y1="44" x2="39" y2="44" stroke="#c8a020" stroke-width="0.6" opacity="0.5"/>
+  <!-- 家紋 -->
+  <circle cx="28" cy="43" r="3.5" fill="none" stroke="#c8a020" stroke-width="0.8"/>
+  <circle cx="28" cy="43" r="1.5" fill="#c8a020" opacity="0.7"/>
+</svg>
