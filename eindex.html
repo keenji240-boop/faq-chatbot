@@ -418,7 +418,7 @@ const GAS_URL      = 'https://script.google.com/macros/s/AKfycbylJgnywmzQDCV9uIc
 //  多言語対応
 // ============================================================
 let currentLang = 'ja';              // 現在の作業言語（ja/en/zh/ko）
-let _langDetectBuffer = [];          // 裏判定の連続検出バッファ
+let _langDetectBuffer = [];          // （未使用・将来のクライアント側補助判定用に予約）
 const LANG_SPEECH_MAP = {            // SpeechRecognition用言語コード
   ja: 'ja-JP', en: 'en-US', zh: 'zh-CN', ko: 'ko-KR'
 };
@@ -437,7 +437,7 @@ function C_detectInitialLang() {
 function C_setLang(lang) {
   if (!LANG_SPEECH_MAP[lang]) return;
   currentLang = lang;
-  _langDetectBuffer = []; // バッファリセット
+  _langDetectBuffer = []; // バッファリセット（未使用）
 
   // ボタンのactive表示更新
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
@@ -452,57 +452,32 @@ function C_setLang(lang) {
 }
 
 // ── 即時ヒューリスティック判定（送信直前に同期的に実行・APIを使わない）──
-// 文字種の比率から言語をその場で推定し、currentLangを即座に更新する。
-// 裏判定（Translation API）は精度確認・連続検出用の補助として併用。
+// ============================================================
+//  多言語仕様 Ver.2.0
+//  主判定: AI①（Chat.gs内・サーバー側）
+//  補助判定: Translation API（Chat.gs内・サーバー側・不一致時優先）
+//  → 言語判定はすべてサーバー側で完結し、C_sendMessage内で
+//    res.langを受け取ってcurrentLangを更新する方式に統一。
+//
+//  以下は補助機能として残置（將来的なクライアント側即時表示用）。
+//  現状どこからも呼び出されないが、仕様書Ver.2.0 7章の指示により
+//  「補助機能として残す」ため削除しない。
+// ============================================================
 function C_quickDetectLang(text) {
   if (!text) return currentLang;
 
   const len = text.length;
-  // 各文字種の出現数をカウント
   const hangulCount  = (text.match(/[\uAC00-\uD7A3]/g)  || []).length; // 韓国語
   const hanCount     = (text.match(/[\u4E00-\u9FFF]/g)  || []).length; // 漢字（中/日共通）
   const kanaCount    = (text.match(/[\u3040-\u30FF]/g)  || []).length; // ひらがな・カタカナ
   const latinCount   = (text.match(/[A-Za-z]/g)          || []).length; // ラテン文字
 
-  // 優先度: 韓国語 > かな（日本語確定） > ラテン主体（英語） > 漢字のみ（中国語）
   if (hangulCount / len > 0.2) return 'ko';
-  if (kanaCount > 0)           return 'ja'; // ひらがな/カタカナがあれば日本語確定
+  if (kanaCount > 0)           return 'ja';
   if (latinCount / len > 0.5)  return 'en';
-  if (hanCount / len > 0.3)    return 'zh'; // 漢字のみ（かな無し）は中国語と推定
+  if (hanCount / len > 0.3)    return 'zh';
 
-  return currentLang; // 判定できない場合は現状維持
-}
-
-// 裏判定: 確定テキストごとに呼び出し、メイン処理をブロックしない
-async function C_detectLanguageInBackground(text) {
-  if (!text || text.length < 3) return; // 短すぎるテキストは判定しない
-  try {
-    const res = await C_gasCall('detectLanguage', { text });
-    if (!res.success) return;
-
-    const detected = res.lang; // 'ja','en','zh','ko' など
-    if (!LANG_SPEECH_MAP[detected]) return; // 対応外言語は無視
-
-    if (detected === currentLang) {
-      _langDetectBuffer = []; // 一致したらバッファクリア
-      return;
-    }
-
-    // 連続検出バッファに追加
-    _langDetectBuffer.push(detected);
-    if (_langDetectBuffer.length > 2) _langDetectBuffer.shift();
-
-    // 2回連続で同じ新言語が検出されたら切替確定
-    if (_langDetectBuffer.length === 2 &&
-        _langDetectBuffer[0] === _langDetectBuffer[1] &&
-        _langDetectBuffer[0] === detected) {
-      console.log('[Lang] 自動切替確定: ' + currentLang + ' → ' + detected);
-      C_setLang(detected);
-      C_addMsg('system', LANG_NAMES[detected] + 'に切り替えました。');
-    }
-  } catch(e) {
-    console.log('[Lang] 裏判定エラー: ' + e.message);
-  }
+  return currentLang;
 }
 const OAUTH_CLIENT_ID = '826029939967-t2d00f9l7p537gtdi6mqt8hl8kn1gml6.apps.googleusercontent.com';
 const TOKEN_KEY = 'faq_token';
@@ -959,21 +934,23 @@ function C_sendMessage() {
     return;
   }
 
-  // 送信直前に即時ヒューリスティック判定でcurrentLangを更新
-  // （裏判定はAPI待ちで1ターン遅れるため、送信前にローカルで即時判定する）
-  const quickLang = C_quickDetectLang(text);
-  if (quickLang !== currentLang) {
-    C_setLang(quickLang);
-  }
-
   el.value = ''; el.style.height = 'auto';
   C_addMsg('user', text);
   const loadRow = C_addMsg('loading', '', true);
 
-  C_gasCall('chat', { text, lang: currentLang })
+  // 多言語仕様Ver.2.0: 言語判定はAI①（主）+ Translation API（補助）がサーバー側で行う
+  // フロントはisMultilingualフラグのみ送信し、結果のres.langでcurrentLangを更新する
+  C_gasCall('chat', { text, isMultilingual: true })
     .then(res => {
       loadRow.remove();
       if (!res.success) { C_addMsg('error', res.message || 'エラーが発生しました。'); return; }
+
+      // サーバー側の最終言語判定結果でcurrentLangを更新
+      if (res.lang && res.lang !== currentLang) {
+        console.log('[Lang] サーバー判定で切替: ' + currentLang + ' → ' + res.lang);
+        C_setLang(res.lang);
+      }
+
       switch(res.type) {
         case 'faq':
           C_addBotMsgWithExtras(res.answer, res.urls, res.phones, res.emails);
@@ -1071,8 +1048,8 @@ function C_startMicModal() {
           document.getElementById('micModalTranscript').textContent = '「' + text + '」';
           C_setMicModalStatus('送信中…');
 
-          // 裏で言語判定（メイン処理をブロックしない・並行実行）
-          C_detectLanguageInBackground(text);
+          // 多言語仕様Ver.2.0: 言語判定はサーバー側（AI①+Translation API）で実施
+          // フロント側の事前判定は不要（C_sendMessage内でres.langを反映）
 
           const detected = C_detectCommand(text);
           if (!detected) {
