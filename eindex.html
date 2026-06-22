@@ -951,10 +951,25 @@ function C_sendMessage() {
         C_setLang(res.lang);
       }
 
+      // 多言語: システム側の付加メッセージも現在言語で生成
+      const sysLang = res.lang || currentLang;
+      const MSG_CHECK_LINK = {
+        ja:'　画面のリンク先を確認してください。',
+        en:'　Please check the links on the screen.',
+        zh:'　请查看屏幕上的链接。',
+        ko:'　화면의 링크를 확인해 주세요。'
+      };
+      const MSG_UNRESOLVED = {
+        ja: (no) => '担当者に確認します。受付番号は' + no + '番です。',
+        en: (no) => 'We will check with the staff. Your reference number is ' + no + '.',
+        zh: (no) => '我们将与工作人员确认。受理号是' + no + '号。',
+        ko: (no) => '담당자가 확인 후 답변드리겠습니다. 접수번호는 ' + no + '번입니다。'
+      };
+
       switch(res.type) {
         case 'faq':
           C_addBotMsgWithExtras(res.answer, res.urls, res.phones, res.emails);
-          C_speakViaModal(res.answer + (res.urls && res.urls.length ? '　画面のリンク先を確認してください。' : ''));
+          C_speakViaModal(res.answer + (res.urls && res.urls.length ? (MSG_CHECK_LINK[sysLang] || MSG_CHECK_LINK.ja) : ''));
           lastBotMsg = res.answer;
           break;
         case 'chat':
@@ -964,7 +979,7 @@ function C_sendMessage() {
           break;
         case 'unresolved':
           C_addMsg('bot', res.answer);
-          C_speakViaModal('担当者に確認します。受付番号は' + res.receiptNo + '番です。');
+          C_speakViaModal((MSG_UNRESOLVED[sysLang] || MSG_UNRESOLVED.ja)(res.receiptNo));
           lastBotMsg = res.answer;
           break;
         default:
