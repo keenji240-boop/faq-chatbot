@@ -63,15 +63,15 @@ textarea{resize:vertical;min-height:80px}
 #modeBarExit:hover{opacity:1}
 #logoutBtn{padding:4px 10px;border-radius:6px;font-size:11px;background:transparent;color:var(--text2);border:1px solid var(--border2)}
 /* ── 多言語切替UI ── */
-#langSwitcher{display:flex;gap:3px;align-items:center;margin-right:6px}
+#langSwitcher{display:flex;gap:4px;align-items:center;margin-right:8px;padding:3px 6px;background:rgba(255,255,255,.03);border-radius:8px}
 .lang-btn{
-  width:26px;height:26px;border-radius:6px;font-size:13px;
-  background:var(--surface3);border:1px solid var(--border2);
+  width:32px;height:28px;border-radius:6px;font-size:16px;
+  background:var(--surface3);border:1.5px solid var(--border2);
   display:flex;align-items:center;justify-content:center;
-  opacity:.5;transition:all .15s;
+  opacity:.55;transition:all .15s;cursor:pointer;
 }
-.lang-btn.active{opacity:1;border-color:var(--accent);background:rgba(79,142,247,.15)}
-.lang-btn:hover{opacity:.85}
+.lang-btn.active{opacity:1;border-color:#4f8ef7;background:rgba(79,142,247,.25);box-shadow:0 0 0 1px rgba(79,142,247,.4)}
+.lang-btn:hover{opacity:.9;transform:scale(1.08)}
 #langAutoNote{font-size:9px;color:var(--text2)}
 
 /* ── PC 2カラム（1320px超） ── */
@@ -725,10 +725,11 @@ function C_initApp(email, role, displayRole, maskedEmail) {
     .then(res => {
       document.querySelectorAll('.msg-loading').forEach(el => el.closest('.msg-row') ? el.closest('.msg-row').remove() : el.remove());
       COMMANDS = (res.commands || res) || [];
-      C_addMsg('system', displayRole + 'としてログインしました。');
+      const roleEn = { '管理者':'Admin', '教職員':'Staff', '学生':'Student', '一般':'Guest' }[displayRole] || displayRole;
+      C_addMsg('system', displayRole + 'としてログインしました。（Logged in as ' + roleEn + '）');
       C_renderButtons();
       C_gasCall('writeLog', { logAction:'LOGIN', detail:'', result:'成功' }).catch(()=>{});
-      C_addMsg('bot', '何かご質問はありますか？');
+      C_addMsg('bot', '何かご質問はありますか？（How can I help you?）');
       C_checkMicAutoStart();
     })
     .catch(e => C_addMsg('error', '初期化エラー: ' + e.message));

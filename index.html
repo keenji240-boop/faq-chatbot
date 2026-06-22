@@ -535,9 +535,9 @@ const C_ANIM_FILES = [
   'animations/anim009_machine_god.js',
 ];
 function C_loadRandomAnim() {
-  const src  = C_ANIM_FILES[Math.floor(Math.random() * C_ANIM_FILES.length)];
-  const scr  = document.createElement('script');
-  scr.src    = src;
+  const src = C_ANIM_FILES[Math.floor(Math.random() * C_ANIM_FILES.length)];
+  const scr = document.createElement('script');
+  scr.src   = src;
   scr.onload = function() {
     const el = document.getElementById('animHeader');
     if (el && typeof initAnim === 'function') initAnim(el);
@@ -545,15 +545,67 @@ function C_loadRandomAnim() {
   document.head.appendChild(scr);
 }
 
+// ── ランダムアイコン動的ロード ──
+const C_BOT_ICONS = [
+  'icons/bot/bot01_robot.svg',
+  'icons/bot/bot02_circuit.svg',
+  'icons/bot/bot03_magic.svg',
+  'icons/bot/bot04_owl.svg',
+  'icons/bot/bot05_geo.svg',
+  'icons/bot/bot06_dragon.svg',
+];
+const C_USER_ICONS = [
+  'icons/user/user01_ninja.svg',
+  'icons/user/user02_astronaut.svg',
+  'icons/user/user03_wizard.svg',
+  'icons/user/user04_cyberpunk.svg',
+  'icons/user/user05_samurai.svg',
+  'icons/user/user06_elf.svg',
+];
+
+// セッション中は同じアイコンを使い回す
+let _botSvgCache  = null;
+let _userSvgCache = null;
+
+function C_pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// SVGをfetchして文字列キャッシュ、コールバックで返す
+function C_fetchSvg(path, callback) {
+  fetch(path)
+    .then(r => r.text())
+    .then(svg => callback(svg))
+    .catch(() => callback(null));
+}
+
+// アイコンをセットする共通関数（widthとheightを強制指定）
+function C_applySvg(el, svgText) {
+  if (!el || !svgText) return;
+  el.innerHTML = svgText;
+  const svgEl = el.querySelector('svg');
+  if (svgEl) { svgEl.setAttribute('width','56'); svgEl.setAttribute('height','56'); }
+}
+
 // アニメ・マスコット初期化（二重実行防止）
 let _animInited = false;
 function C_initAnimations() {
-  // マスコットSVG設定
-  const mascotEl = document.getElementById('mascotSvgWrap');
-  if (mascotEl && window.C_getBotIconSVG) {
-    mascotEl.innerHTML = window.C_getBotIconSVG();
-    const svgEl = mascotEl.querySelector('svg');
-    if (svgEl) { svgEl.setAttribute('width','56'); svgEl.setAttribute('height','56'); }
+  // BOTアイコンをランダムにfetchしてキャッシュ＆マスコット設定
+  if (!_botSvgCache) {
+    C_fetchSvg(C_pickRandom(C_BOT_ICONS), svg => {
+      _botSvgCache = svg || '🤖';
+      const mascotEl = document.getElementById('mascotSvgWrap');
+      C_applySvg(mascotEl, _botSvgCache);
+    });
+  } else {
+    const mascotEl = document.getElementById('mascotSvgWrap');
+    C_applySvg(mascotEl, _botSvgCache);
+  }
+  // USERアイコンをランダムにfetchしてキャッシュ
+  if (!_userSvgCache) {
+    C_fetchSvg(C_pickRandom(C_USER_ICONS), svg => {
+      _userSvgCache = svg || '👤';
+    });
   }
   // アニメは一度だけ起動
   if (_animInited) return;
@@ -664,9 +716,24 @@ function C_addMsg(type, text, isLoading) {
   iconDiv.className = iconClass[type] || 'msg-icon-system';
   // SVGアイコン or 絵文字フォールバック
   if (type === 'bot' || type === 'loading') {
-    iconDiv.innerHTML = window.C_getBotIconSVG ? window.C_getBotIconSVG() : '🤖';
+    if (_botSvgCache) {
+      C_applySvg(iconDiv, _botSvgCache);
+    } else {
+      iconDiv.textContent = '🤖';
+      // キャッシュが取れたら遅延セット
+      const _waitBot = setInterval(() => {
+        if (_botSvgCache) { C_applySvg(iconDiv, _botSvgCache); clearInterval(_waitBot); }
+      }, 100);
+    }
   } else if (type === 'user') {
-    iconDiv.innerHTML = window.C_getUserIconSVG ? window.C_getUserIconSVG() : '👤';
+    if (_userSvgCache) {
+      C_applySvg(iconDiv, _userSvgCache);
+    } else {
+      iconDiv.textContent = '👤';
+      const _waitUser = setInterval(() => {
+        if (_userSvgCache) { C_applySvg(iconDiv, _userSvgCache); clearInterval(_waitUser); }
+      }, 100);
+    }
   } else {
     iconDiv.textContent = { system:'ℹ️', error:'⚠️' }[type] || 'ℹ️';
   }
