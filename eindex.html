@@ -63,15 +63,34 @@ textarea{resize:vertical;min-height:80px}
 #modeBarExit:hover{opacity:1}
 #logoutBtn{padding:4px 10px;border-radius:6px;font-size:11px;background:transparent;color:var(--text2);border:1px solid var(--border2)}
 /* ── 多言語切替UI ── */
-#langSwitcher{display:flex;gap:4px;align-items:center;margin-right:8px;padding:3px 6px;background:rgba(255,255,255,.03);border-radius:8px}
+#langSwitcher{display:flex;gap:5px;align-items:center;margin-right:8px;padding:4px 7px;background:rgba(255,255,255,.03);border-radius:8px}
 .lang-btn{
-  width:32px;height:28px;border-radius:6px;font-size:16px;
-  background:var(--surface3);border:1.5px solid var(--border2);
+  width:34px;height:30px;border-radius:6px;
+  font-size:11px;font-weight:700;letter-spacing:.03em;
+  background:#15151f;
+  border:1.5px solid transparent;
+  background-image:
+    linear-gradient(#15151f,#15151f),
+    linear-gradient(135deg,#9a9a9a 0%,#e8e8e8 30%,#c0c0c0 50%,#f5f5f5 70%,#9a9a9a 100%);
+  background-origin:border-box;
+  background-clip:padding-box,border-box;
   display:flex;align-items:center;justify-content:center;
-  opacity:.55;transition:all .15s;cursor:pointer;
+  opacity:.6;transition:all .15s;cursor:pointer;
+  color:transparent;
 }
-.lang-btn.active{opacity:1;border-color:#4f8ef7;background:rgba(79,142,247,.25);box-shadow:0 0 0 1px rgba(79,142,247,.4)}
-.lang-btn:hover{opacity:.9;transform:scale(1.08)}
+.lang-btn::before{
+  content:attr(data-label);
+  background:linear-gradient(135deg,#bf953f 0%,#fcf6ba 30%,#b38728 50%,#fbf5b7 70%,#aa771c 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.lang-btn.active{
+  opacity:1;
+  background-image:
+    linear-gradient(#1a1a28,#1a1a28),
+    linear-gradient(135deg,#e8e8e8 0%,#fff 30%,#d4d4d4 50%,#fff 70%,#c0c0c0 100%);
+  box-shadow:0 0 8px rgba(212,175,55,.4);
+}
+.lang-btn:hover{opacity:.95;transform:scale(1.08)}
 #langAutoNote{font-size:9px;color:var(--text2)}
 
 /* ── PC 2カラム（1320px超） ── */
@@ -331,10 +350,10 @@ textarea{resize:vertical;min-height:80px}
     </div>
     <div class="topbar-right">
       <div id="langSwitcher" title="読み上げ・認識言語を切り替え">
-        <button class="lang-btn" id="langBtn-ja" onclick="C_setLang('ja')" title="日本語">🇯🇵</button>
-        <button class="lang-btn" id="langBtn-en" onclick="C_setLang('en')" title="English">🇺🇸</button>
-        <button class="lang-btn" id="langBtn-zh" onclick="C_setLang('zh')" title="中文">🇨🇳</button>
-        <button class="lang-btn" id="langBtn-ko" onclick="C_setLang('ko')" title="한국어">🇰🇷</button>
+        <button class="lang-btn" id="langBtn-ja" data-label="JP" onclick="C_setLang('ja')" title="日本語"></button>
+        <button class="lang-btn" id="langBtn-en" data-label="EN" onclick="C_setLang('en')" title="English"></button>
+        <button class="lang-btn" id="langBtn-zh" data-label="ZH" onclick="C_setLang('zh')" title="中文"></button>
+        <button class="lang-btn" id="langBtn-ko" data-label="KO" onclick="C_setLang('ko')" title="한국어"></button>
       </div>
       <button class="btn btn-ghost btn-sm" id="micPopupBtn" onclick="C_openMicPopup()" style="display:none">🎙 音声</button>
       <button class="btn btn-ghost btn-sm" id="logoutBtn" style="display:none" onclick="C_logout()">ログアウト</button>
@@ -430,6 +449,28 @@ function C_setLang(lang) {
     try { micRecognition.lang = LANG_SPEECH_MAP[lang]; } catch(e) {}
   }
   console.log('[Lang] 切替: ' + lang);
+}
+
+// ── 即時ヒューリスティック判定（送信直前に同期的に実行・APIを使わない）──
+// 文字種の比率から言語をその場で推定し、currentLangを即座に更新する。
+// 裏判定（Translation API）は精度確認・連続検出用の補助として併用。
+function C_quickDetectLang(text) {
+  if (!text) return currentLang;
+
+  const len = text.length;
+  // 各文字種の出現数をカウント
+  const hangulCount  = (text.match(/[\uAC00-\uD7A3]/g)  || []).length; // 韓国語
+  const hanCount     = (text.match(/[\u4E00-\u9FFF]/g)  || []).length; // 漢字（中/日共通）
+  const kanaCount    = (text.match(/[\u3040-\u30FF]/g)  || []).length; // ひらがな・カタカナ
+  const latinCount   = (text.match(/[A-Za-z]/g)          || []).length; // ラテン文字
+
+  // 優先度: 韓国語 > かな（日本語確定） > ラテン主体（英語） > 漢字のみ（中国語）
+  if (hangulCount / len > 0.2) return 'ko';
+  if (kanaCount > 0)           return 'ja'; // ひらがな/カタカナがあれば日本語確定
+  if (latinCount / len > 0.5)  return 'en';
+  if (hanCount / len > 0.3)    return 'zh'; // 漢字のみ（かな無し）は中国語と推定
+
+  return currentLang; // 判定できない場合は現状維持
 }
 
 // 裏判定: 確定テキストごとに呼び出し、メイン処理をブロックしない
@@ -916,6 +957,13 @@ function C_sendMessage() {
       C_speakViaModal(modeLabel + 'モード中です。終了と言うと戻ります。');
     }
     return;
+  }
+
+  // 送信直前に即時ヒューリスティック判定でcurrentLangを更新
+  // （裏判定はAPI待ちで1ターン遅れるため、送信前にローカルで即時判定する）
+  const quickLang = C_quickDetectLang(text);
+  if (quickLang !== currentLang) {
+    C_setLang(quickLang);
   }
 
   el.value = ''; el.style.height = 'auto';
